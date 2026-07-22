@@ -1,0 +1,1 @@
+export function StatusBadge({ status }: { status?: string }) { const tone = status === 'active' ? 'text-emerald-300 bg-emerald-400/10' : status === 'archived' ? 'text-slate-400 bg-slate-400/10' : 'text-amber-300 bg-amber-400/10'; return <span className={`rounded px-1.5 py-0.5 text-[10px] ${tone}`}>{status ?? '—'}</span> }

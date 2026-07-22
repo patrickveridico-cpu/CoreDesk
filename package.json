@@ -1,0 +1,84 @@
+{
+  "name": "coredesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace operacional desktop CoreDesk",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "concurrently -k \"npm:watch:electron\" \"npm:start:electron\"",
+    "watch:electron": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
+    "start:electron": "set ELECTRON_RUN_AS_NODE=&& wait-on tcp:5173 dist-electron/electron/main.js && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron --disable-gpu .",
+    "test:manual": "node scripts/manual-test.mjs",
+    "test:manual:whatsapp": "node scripts/manual-whatsapp-test.mjs",
+    "diagnose:operations": "node scripts/diagnose-operations.mjs",
+    "test": "vitest run",
+    "assets:generate": "node scripts/generate-brand-assets.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:electron",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.1",
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.30.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "postcss": "^8.5.6",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vite": "^7.0.5",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.3",
+    "ws": "^8.21.1"
+  },
+  "build": {
+    "appId": "com.coredesk.app",
+    "productName": "CoreDesk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "assets/brand/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/brand/coredesk.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "assets/brand/derived",
+      "target": ["AppImage", "snap"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/brand/coredesk.ico",
+      "uninstallerIcon": "assets/brand/coredesk.ico"
+    }
+  }
+}

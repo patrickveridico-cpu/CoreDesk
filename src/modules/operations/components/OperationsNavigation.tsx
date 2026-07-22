@@ -1,0 +1,8 @@
+import { Archive, Building2, DatabaseBackup, FileClock, Import, Save, ShieldCheck, RefreshCw } from 'lucide-react'
+
+export type OperationsSection = 'quote' | 'history' | 'companies' | 'bases' | 'insurers' | 'specialties' | 'tables' | 'import' | 'backups' | 'audit'
+const items: Array<[OperationsSection, string, typeof Save]> = [['quote', 'Orçamento', Save], ['history', 'Histórico', FileClock], ['companies', 'Empresas', Building2], ['bases', 'Bases', DatabaseBackup], ['insurers', 'Seguradoras', ShieldCheck], ['specialties', 'Especialidades', Archive], ['tables', 'Tabelas', RefreshCw], ['import', 'Importação', Import], ['backups', 'Backups', DatabaseBackup], ['audit', 'Auditoria', FileClock]]
+
+export function OperationsNavigation({ active, onChange }: { active: OperationsSection; onChange: (section: OperationsSection) => void }) {
+  return <nav aria-label="Operações" className="operations-top-navigation flex min-h-[38px] shrink-0 items-center gap-1 overflow-x-auto border-b border-core-line bg-core-panel px-2"><span className="mr-2 shrink-0 px-1 text-[10px] font-semibold uppercase tracking-[.2em] text-core-accent">Operações</span>{items.map(([id, label, Icon]) => <button key={id} aria-current={active === id ? 'page' : undefined} onClick={() => onChange(id)} title={label} className={`flex h-7 shrink-0 items-center gap-1.5 rounded px-2 text-xs transition-all duration-150 active:scale-95 ${active === id ? 'bg-core-accent/15 text-core-accent ring-1 ring-core-accent/30' : 'text-slate-400 hover:-translate-y-px hover:bg-white/5 hover:text-slate-200'}`}><Icon size={13} />{label}</button>)}</nav>
+}

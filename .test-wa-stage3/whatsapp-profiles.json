@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "d3f44568-a231-4cca-9bd4-4f27a0a76c6b",
+      "partition": "persist:coredesk-whatsapp-d3f44568-a231-4cca-9bd4-4f27a0a76c6b",
+      "name": "Operações",
+      "accentColor": "#a78bfa",
+      "icon": "initials",
+      "order": 0,
+      "enabled": true,
+      "open": true,
+      "suspended": false,
+      "notificationsEnabled": false,
+      "createdAt": "2026-07-21T18:56:35.528Z",
+      "updatedAt": "2026-07-21T18:56:43.287Z"
+    },
+    {
+      "id": "ec68bd9c-9407-4a25-ad20-611e035148e1",
+      "partition": "persist:coredesk-whatsapp-ec68bd9c-9407-4a25-ad20-611e035148e1",
+      "name": "Comercial",
+      "accentColor": "#22c55e",
+      "icon": "initials",
+      "order": 1,
+      "enabled": true,
+      "open": true,
+      "suspended": false,
+      "notificationsEnabled": false,
+      "createdAt": "2026-07-21T18:56:35.505Z",
+      "updatedAt": "2026-07-21T18:56:43.989Z"
+    },
+    {
+      "id": "9867527d-6ff4-4013-8a1c-cec5213ef535",
+      "partition": "persist:coredesk-whatsapp-9867527d-6ff4-4013-8a1c-cec5213ef535",
+      "name": "Atendimento Principal",
+      "accentColor": "#f59e0b",
+      "icon": "builtin:message",
+      "order": 2,
+      "enabled": true,
+      "open": true,
+      "suspended": false,
+      "notificationsEnabled": false,
+      "createdAt": "2026-07-21T18:56:35.485Z",
+      "updatedAt": "2026-07-21T18:56:50.328Z"
+    }
+  ],
+  "activeProfileId": "9867527d-6ff4-4013-8a1c-cec5213ef535"
+}
