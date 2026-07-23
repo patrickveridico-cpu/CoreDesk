@@ -4,13 +4,14 @@ import type { BudgetMapsRoutePayload, WebTabDescriptor } from '../shared/contrac
 import type { CoreConfig } from '../shared/core/contracts'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput } from '../shared/whatsapp'
 import { CORECHAT_PARTITION, CORECHAT_URL, CORECHAT_VIEW_ID } from '../shared/corechat'
-import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, CORECHAT_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
+import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, CORECHAT_CHANNELS, DOWNLOAD_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
 import { WebViewManager } from './WebViewManager'
 import { createAppServices } from './core/bootstrap/AppServices'
 import type { AppServices } from './core/bootstrap/AppServices'
 import { WhatsAppProfileManager } from './whatsapp/WhatsAppProfileManager'
 import { WhatsAppProfileStore } from './whatsapp/WhatsAppProfileStore'
 import { WhatsAppExternalLinkManager } from './whatsapp/WhatsAppExternalLinkManager'
+import { DownloadService } from './downloads/DownloadService'
 
 function logBootstrap(message: string, details?: unknown) {
   if (details === undefined) {
@@ -112,6 +113,15 @@ function createWindow() {
     splashWindow = null
   })
   whatsappExternalLinks = new WhatsAppExternalLinkManager(mainWindow, uiZoomFactor)
+  const downloadService = new DownloadService(mainWindow, {
+    emitStatus: (status) => {
+      const targetWindow = mainWindow
+      if (targetWindow && !targetWindow.isDestroyed() && !targetWindow.webContents.isDestroyed()) {
+        targetWindow.webContents.send(DOWNLOAD_CHANNELS.statusChanged, status)
+      }
+    },
+  })
+  appServices?.permissions.setDownloadHandler((event, item, source) => downloadService.handle(event, item, source))
   viewManager = new WebViewManager(mainWindow, (update) => whatsappManager?.handleViewState(update), appServices?.permissions, (payload) => {
     if (!isValidBudgetMapsRoutePayload(payload) || !mainWindow || mainWindow.isDestroyed()) return
     const safePayload: BudgetMapsRoutePayload = {

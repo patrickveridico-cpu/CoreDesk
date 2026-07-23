@@ -4,6 +4,7 @@ import { ProfileSwitcher } from './components/communication/ProfileSwitcher'
 import { GlobalTopBar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
 import { WorkspaceContent } from './components/WorkspaceContent'
+import { DownloadToast } from './components/DownloadToast'
 import { useTabShortcuts } from './hooks/useTabShortcuts'
 import { useWebViewBridge } from './hooks/useWebViewBridge'
 import { useWhatsAppProfiles } from './hooks/useWhatsAppProfiles'
@@ -84,6 +85,7 @@ export default function App() {
         <WorkspaceContent />
       </div>
       <ProfileSwitcher />
+      <DownloadToast />
     </div>
   )
 }

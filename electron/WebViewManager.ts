@@ -322,6 +322,13 @@ export class WebViewManager {
     this.views.set(descriptor.id, entry)
     this.devLog('createView', { target: descriptor.id, reused: false })
     this.configureSession(view.webContents.session, descriptor.partition)
+    this.permissions?.registerDownloadSource?.(view.webContents, {
+      viewId: descriptor.id,
+      partition: descriptor.partition,
+      type: descriptor.type,
+      profileId: descriptor.profileId,
+      isVisible: () => this.activeId === descriptor.id && this.attachedId === descriptor.id,
+    })
     this.registerViewEvents(entry)
     void view.webContents.loadURL(descriptor.url)
   }
@@ -725,6 +732,7 @@ export class WebViewManager {
       this.attachedId = null
     }
     entry.cleanup.forEach((cleanup) => cleanup())
+    this.permissions?.unregisterDownloadSource?.(entry.view.webContents)
     if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
     this.embedded.delete(id)
     if (!entry.view.webContents.isDestroyed()) {

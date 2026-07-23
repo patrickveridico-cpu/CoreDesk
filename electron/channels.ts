@@ -24,6 +24,10 @@ export const BUDGET_MAPS_CHANNELS = {
   routeUpdated: 'budget-maps:route-updated',
 } as const
 
+export const DOWNLOAD_CHANNELS = {
+  statusChanged: 'downloads:status-changed',
+} as const
+
 export const CORECHAT_CHANNELS = {
   getCompact: 'corechat:get-compact',
   setCompact: 'corechat:set-compact',

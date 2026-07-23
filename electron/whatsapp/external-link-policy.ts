@@ -23,6 +23,14 @@ export function isWhatsAppInternalUrl(value: string) {
 }
 
 export function classifyWhatsAppExternalLink(value: string): WhatsAppExternalLinkDecision {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol === 'blob:') {
+      return { action: 'block', protocol: 'blob:', hostname: '', reason: 'download-protocol-not-navigation' }
+    }
+  } catch {
+    return { action: 'block', protocol: 'invalid', hostname: '', reason: 'invalid-url' }
+  }
   if (isWhatsAppInternalUrl(value)) {
     try {
       const parsed = new URL(value)

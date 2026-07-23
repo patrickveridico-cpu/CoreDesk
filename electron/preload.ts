@@ -7,6 +7,7 @@ import type {
   WebViewStateUpdate,
   BudgetMapsRoutePayload,
 } from '../shared/contracts'
+import type { DownloadStatus } from '../shared/downloads'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput, WhatsAppProfilesSnapshot, WhatsAppProfileState } from '../shared/whatsapp'
 import type { CoreCommandInfo, CoreConfig } from '../shared/core/contracts'
 import type { OperationsApi } from '../shared/operations/contracts'
@@ -35,6 +36,7 @@ const VIEW_CHANNELS = {
   shortcut: 'views:shortcut',
 } as const
 const BUDGET_MAPS_CHANNELS = { routeUpdated: 'budget-maps:route-updated' } as const
+const DOWNLOAD_CHANNELS = { statusChanged: 'downloads:status-changed' } as const
 const CORECHAT_CHANNELS = { getCompact: 'corechat:get-compact', setCompact: 'corechat:set-compact' } as const
 const ZOOM_CHANNELS = { get: 'zoom:get', set: 'zoom:set', changed: 'zoom:changed' } as const
 
@@ -101,6 +103,13 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, payload: BudgetMapsRoutePayload) => callback(payload)
       ipcRenderer.on(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
       return () => ipcRenderer.removeListener(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
+    },
+  },
+  downloads: {
+    onStatusChanged: (callback: (status: DownloadStatus) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: DownloadStatus) => callback(status)
+      ipcRenderer.on(DOWNLOAD_CHANNELS.statusChanged, listener)
+      return () => ipcRenderer.removeListener(DOWNLOAD_CHANNELS.statusChanged, listener)
     },
   },
   coreChat: {

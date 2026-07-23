@@ -1,9 +1,24 @@
-import type { Session, WebContents } from 'electron'
+import type { DownloadItem, Event, Session, WebContents } from 'electron'
+import type { DownloadSource } from '../../../shared/downloads'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
 export class PermissionService {
   private readonly configured = new Set<Session>()
+  private readonly downloadSources = new WeakMap<WebContents, DownloadSource>()
+  private downloadHandler?: (event: Event, item: DownloadItem, source: DownloadSource) => void
+
+  setDownloadHandler(handler: (event: Event, item: DownloadItem, source: DownloadSource) => void) {
+    this.downloadHandler = handler
+  }
+
+  registerDownloadSource(contents: WebContents, source: DownloadSource) {
+    this.downloadSources.set(contents, source)
+  }
+
+  unregisterDownloadSource(contents: WebContents) {
+    this.downloadSources.delete(contents)
+  }
 
   configureSession(electronSession: Session) {
     if (this.configured.has(electronSession)) return
@@ -14,7 +29,14 @@ export class PermissionService {
       void _permission
       callback(false)
     })
-    electronSession.on('will-download', (event) => event.preventDefault())
+    electronSession.on('will-download', (event, item, contents) => {
+      const source = this.downloadSources.get(contents)
+      if (!source || !this.downloadHandler) {
+        event.preventDefault()
+        return
+      }
+      this.downloadHandler(event, item, source)
+    })
   }
 
   isAllowedUrl(value: string) {

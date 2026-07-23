@@ -10,6 +10,7 @@ import type {
 import type { CoreCommandInfo, CoreConfig } from './core/contracts'
 import type { OperationsApi } from './operations/contracts'
 import type { CoreChatCompactResult } from './corechat'
+import type { DownloadStatus } from './downloads'
 
 export type TabType = 'internal' | 'web' | 'whatsapp'
 
@@ -127,6 +128,9 @@ export interface CoreDeskApi {
   }
   budgetMaps: {
     onRouteUpdated: (callback: (payload: BudgetMapsRoutePayload) => void) => () => void
+  }
+  downloads: {
+    onStatusChanged: (callback: (status: DownloadStatus) => void) => () => void
   }
   zoom: {
     get: () => Promise<number>
