@@ -60,6 +60,22 @@ export interface WebViewStateUpdate {
   error?: WebLoadError | null
 }
 
+export interface BudgetMapsRoutePayload {
+  distanceKm: number | null
+  distanceText: string | null
+  durationText: string | null
+  durationMinutes: number | null
+  routeText: string | null
+  origin?: string | null
+  destination?: string | null
+  hasTolls: boolean | null
+  confidence: 'high' | 'medium' | 'low'
+  score: number
+  routeVisible: boolean
+  source: 'google-maps-dom'
+  capturedAt: string
+}
+
 export interface NewTabRequest {
   url: string
   partition: string
@@ -101,6 +117,14 @@ export interface CoreDeskApi {
     onStateChange: (callback: (update: WebViewStateUpdate) => void) => () => void
     onNewTabRequest: (callback: (request: NewTabRequest) => void) => () => void
     onShortcut: (callback: (command: ShortcutCommand) => void) => () => void
+  }
+  budgetMaps: {
+    onRouteUpdated: (callback: (payload: BudgetMapsRoutePayload) => void) => () => void
+  }
+  zoom: {
+    get: () => Promise<number>
+    set: (factor: number) => Promise<number>
+    onChanged: (callback: (factor: number) => void) => () => void
   }
   core: {
     getConfig: () => Promise<CoreConfig>

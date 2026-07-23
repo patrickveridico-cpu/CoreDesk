@@ -9,6 +9,9 @@ import type {
 import { SHELL_LAYOUT } from '../shared/layout'
 import { VIEW_CHANNELS } from './channels'
 import type { PermissionService } from './core/permissions/PermissionService'
+import { createBudgetMapsDistanceExtractorScript } from '../shared/maps/distanceExtraction'
+import { classifyWhatsAppExternalLink } from './whatsapp/external-link-policy'
+import type { ExternalLinkSource } from './whatsapp/WhatsAppExternalLinkManager'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
@@ -20,6 +23,8 @@ interface ManagedView {
   loading: boolean
   suspended: boolean
   loadTimer?: NodeJS.Timeout
+  budgetRouteTimer?: NodeJS.Timeout
+  budgetRouteInstallToken?: number
 }
 
 function isAllowedUrl(value: string) {
@@ -36,12 +41,19 @@ export class WebViewManager {
   private activeId: string | null = null
   private attachedId: string | null = null
   private readonly embedded = new Set<string>()
+  private zoomFactor: number
 
   constructor(
     private readonly window: BrowserWindow,
     private readonly onViewState?: (update: WebViewStateUpdate) => void,
     private readonly permissions?: PermissionService,
-  ) {}
+    private readonly onBudgetMapsRoute?: (payload: unknown) => void,
+    initialZoomFactor = 1,
+    private readonly onZoomShortcut?: (action: 'decrease' | 'reset' | 'increase') => void,
+    private readonly onWhatsAppExternalLink?: (url: string, source: ExternalLinkSource) => void,
+  ) {
+    this.zoomFactor = initialZoomFactor
+  }
 
   private devLog(message: string, details: Record<string, unknown>) {
     if (!app.isPackaged && process.env.NODE_ENV !== 'production') {
@@ -55,7 +67,7 @@ export class WebViewManager {
 
     for (const id of this.views.keys()) {
       const existing = this.views.get(id)
-      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps') {
+      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps' && id !== 'budget-google-maps') {
         this.destroy(id)
       }
     }
@@ -91,9 +103,35 @@ export class WebViewManager {
       if (attached && !this.window.isDestroyed()) this.window.contentView.removeChildView(attached.view)
       this.attachedId = null
     }
+    const [contentWidth, contentHeight] = this.window.getContentSize()
+    const clampedBounds = {
+      x: Math.max(0, Math.min(contentWidth, Math.round(bounds.x))),
+      y: Math.max(0, Math.min(contentHeight, Math.round(bounds.y))),
+      width: 0,
+      height: 0,
+    }
+    clampedBounds.width = Math.max(0, Math.min(Math.floor(bounds.width), contentWidth - clampedBounds.x))
+    clampedBounds.height = Math.max(0, Math.min(Math.floor(bounds.height), contentHeight - clampedBounds.y))
+    if (clampedBounds.width === 0 || clampedBounds.height === 0) return
+    const wasEmbedded = this.embedded.has(id)
     this.embedded.add(id)
-    entry.view.setBounds(bounds)
-    if (!this.window.isDestroyed() && this.attachedId !== id) this.window.contentView.addChildView(entry.view)
+    entry.view.webContents.setZoomFactor(this.zoomFactor)
+    entry.view.setBounds(clampedBounds)
+    if (!this.window.isDestroyed() && !wasEmbedded) this.window.contentView.addChildView(entry.view)
+  }
+
+  setZoomFactor(factor: number) {
+    this.zoomFactor = factor
+    for (const entry of this.views.values()) {
+      if (!entry.view.webContents.isDestroyed()) entry.view.webContents.setZoomFactor(factor)
+    }
+    this.updateBounds()
+  }
+
+  ensureView(descriptor: WebTabDescriptor) {
+    const current = this.views.get(descriptor.id)
+    if (current) return
+    this.create(descriptor)
   }
 
   navigate(id: string, url: string) {
@@ -186,7 +224,8 @@ export class WebViewManager {
     const entry = this.views.get(this.attachedId)
     if (!entry) return
     const [width, height] = this.window.getContentSize()
-    const y = SHELL_LAYOUT.titleBarHeight + SHELL_LAYOUT.globalBarHeight + (entry.descriptor.type === 'whatsapp' || entry.descriptor.id === 'app-google' || entry.descriptor.id === 'app-maps' ? 0 : SHELL_LAYOUT.navigationBarHeight)
+    const shellHeight = SHELL_LAYOUT.titleBarHeight + SHELL_LAYOUT.globalBarHeight + (entry.descriptor.type === 'whatsapp' || entry.descriptor.id === 'app-google' || entry.descriptor.id === 'app-maps' ? 0 : SHELL_LAYOUT.navigationBarHeight)
+    const y = Math.round(shellHeight * this.zoomFactor)
     const bounds = {
       x: 0,
       y,
@@ -221,6 +260,7 @@ export class WebViewManager {
       loading: false,
       suspended: Boolean(descriptor.suspended),
     }
+    view.webContents.setZoomFactor(this.zoomFactor)
     if (descriptor.type === 'whatsapp') {
       view.webContents.setUserAgent(
         `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`,
@@ -275,10 +315,12 @@ export class WebViewManager {
       entry.loading = false
       if (entry.loadTimer) clearTimeout(entry.loadTimer)
       this.emitState({ id, loading: false, error: null })
+      if (id === 'budget-google-maps') this.installBudgetMapsObserver(entry)
     }
     const onNavigate = (_event: Event, url: string) => {
       entry.descriptor = { ...entry.descriptor, url }
       this.emitNavigationState(entry)
+      if (id === 'budget-google-maps') this.installBudgetMapsObserver(entry)
     }
     const onTitle = (event: Event, title: string) => {
       event.preventDefault()
@@ -304,10 +346,59 @@ export class WebViewManager {
       })
       if (id === this.activeId) this.showActive()
     }
-    const onWillNavigate = (event: Event, url: string) => {
+    const handleWhatsAppNavigation = (eventName: 'will-navigate' | 'will-redirect', event: Event, legacyUrl: string, legacyIsMainFrame?: boolean) => {
+      const details = event as Event & { url?: string; isMainFrame?: boolean }
+      const url = details.url ?? legacyUrl
+      const isMainFrame = details.isMainFrame ?? legacyIsMainFrame ?? true
+      const decision = classifyWhatsAppExternalLink(url)
+      if (entry.descriptor.type === 'whatsapp') {
+        const current = classifyWhatsAppExternalLink(webContents.getURL())
+        const navigationDecision = !isMainFrame
+          ? { action: 'allow', reason: 'subframe-navigation' }
+          : eventName === 'will-redirect'
+            ? decision.action === 'block' || decision.action === 'open-system'
+              ? { action: 'block', reason: `redirect-${decision.action}` }
+              : { action: 'allow', reason: 'automatic-http-redirect' }
+            : decision.action === 'allow-internal'
+              ? { action: 'allow', reason: 'whatsapp-internal-navigation' }
+              : decision.action === 'block'
+                ? { action: 'block', reason: decision.reason }
+                : { action: 'popup', reason: 'external-main-frame-navigation' }
+        if (!app.isPackaged && process.env.NODE_ENV !== 'production') {
+          console.log('[WhatsApp Navigation Debug]', {
+            event: eventName,
+            mainFrame: isMainFrame,
+            protocol: decision.protocol,
+            hostname: decision.hostname,
+            decision: navigationDecision.action,
+            reason: navigationDecision.reason,
+            currentHostname: current.hostname,
+            userGesture: 'unavailable',
+            target: id,
+            profileId: entry.descriptor.profileId,
+          })
+        }
+        if (!isMainFrame) return
+        if (eventName === 'will-redirect') {
+          if (decision.action === 'block' || decision.action === 'open-system') event.preventDefault()
+          return
+        }
+        if (decision.action === 'allow-internal') return
+        event.preventDefault()
+        this.onWhatsAppExternalLink?.(url, { target: id, profileId: entry.descriptor.profileId })
+        return
+      }
       if (!this.isAllowedUrl(url)) event.preventDefault()
     }
+    const onWillNavigate = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleWhatsAppNavigation('will-navigate', event, url, isMainFrame)
+    const onWillRedirect = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleWhatsAppNavigation('will-redirect', event, url, isMainFrame)
     const onBeforeInput = (event: Event, input: Input) => {
+      const zoomAction = this.toZoomShortcut(input)
+      if (zoomAction) {
+        event.preventDefault()
+        this.onZoomShortcut?.(zoomAction)
+        return
+      }
       const command = this.toShortcut(input, entry)
       if (!command) return
       event.preventDefault()
@@ -332,8 +423,18 @@ export class WebViewManager {
     webContents.on('page-favicon-updated', onFavicon)
     webContents.on('did-fail-load', onFail)
     webContents.on('will-navigate', onWillNavigate)
+    webContents.on('will-redirect', onWillRedirect)
     webContents.on('before-input-event', onBeforeInput)
     webContents.setWindowOpenHandler(({ url }) => {
+      if (entry.descriptor.type === 'whatsapp') {
+        const decision = classifyWhatsAppExternalLink(url)
+        if (decision.action === 'allow-internal') {
+          if (decision.protocol === 'http:' || decision.protocol === 'https:') void webContents.loadURL(url)
+        } else {
+          this.onWhatsAppExternalLink?.(url, { target: id, profileId: entry.descriptor.profileId })
+        }
+        return { action: 'deny' }
+      }
       if (this.isAllowedUrl(url)) {
         const request: NewTabRequest = { url, partition: entry.descriptor.partition }
         this.send(VIEW_CHANNELS.newTabRequested, request)
@@ -352,8 +453,27 @@ export class WebViewManager {
       () => webContents.off('page-favicon-updated', onFavicon),
       () => webContents.off('did-fail-load', onFail),
       () => webContents.off('will-navigate', onWillNavigate),
+      () => webContents.off('will-redirect', onWillRedirect),
       () => webContents.off('before-input-event', onBeforeInput),
     )
+  }
+
+  private installBudgetMapsObserver(entry: ManagedView) {
+    if (entry.descriptor.id !== 'budget-google-maps' || entry.view.webContents.isDestroyed()) return
+    if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
+    const installToken = (entry.budgetRouteInstallToken ?? 0) + 1
+    entry.budgetRouteInstallToken = installToken
+    const script = createBudgetMapsDistanceExtractorScript()
+    void entry.view.webContents.executeJavaScript(script).then(() => {
+      if (entry.budgetRouteInstallToken !== installToken) return
+      console.log('[Budget Maps Route] observer-installed')
+      entry.budgetRouteTimer = setInterval(() => {
+        if (entry.view.webContents.isDestroyed()) return
+        void entry.view.webContents.executeJavaScript('window.__coreDeskBudgetMapsRoute ?? null').then((payload) => {
+          if (payload) this.onBudgetMapsRoute?.(payload)
+        }).catch((error) => console.error('[Budget Maps Route] extraction-error', error instanceof Error ? error.message : String(error)))
+      }, 750)
+    }).catch((error) => console.error('[Budget Maps Route] extraction-error', error instanceof Error ? error.message : String(error)))
   }
 
   private safeDomain(value: string) {
@@ -377,6 +497,14 @@ export class WebViewManager {
     if (input.alt && key === 'arrowright') return { type: 'forward' }
     if (key === 'f5') return { type: 'reload' }
     if (key === 'escape' && entry.loading) return { type: 'stop' }
+    return null
+  }
+
+  private toZoomShortcut(input: Input): 'decrease' | 'reset' | 'increase' | null {
+    if (!(input.control || input.meta)) return null
+    if (input.key === '-') return 'decrease'
+    if (input.key === '0') return 'reset'
+    if (input.key === '+' || input.key === '=') return 'increase'
     return null
   }
 
@@ -419,6 +547,7 @@ export class WebViewManager {
     }
 
     if (next && shouldAttach && this.attachedId !== shouldAttach && !this.embedded.has(shouldAttach)) {
+      next.view.webContents.setZoomFactor(this.zoomFactor)
       this.window.contentView.addChildView(next.view)
       this.attachedId = shouldAttach
       this.devLog('showView', { target: shouldAttach, reused: true })
@@ -434,6 +563,7 @@ export class WebViewManager {
       this.attachedId = null
     }
     entry.cleanup.forEach((cleanup) => cleanup())
+    if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
     this.embedded.delete(id)
     if (!entry.view.webContents.isDestroyed()) {
       entry.view.webContents.close({ waitForBeforeUnload: false })

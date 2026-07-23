@@ -5,6 +5,7 @@ import type {
   ShortcutCommand,
   WebTabDescriptor,
   WebViewStateUpdate,
+  BudgetMapsRoutePayload,
 } from '../shared/contracts'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput, WhatsAppProfilesSnapshot, WhatsAppProfileState } from '../shared/whatsapp'
 import type { CoreCommandInfo, CoreConfig } from '../shared/core/contracts'
@@ -33,6 +34,8 @@ const VIEW_CHANNELS = {
   newTabRequested: 'views:new-tab-requested',
   shortcut: 'views:shortcut',
 } as const
+const BUDGET_MAPS_CHANNELS = { routeUpdated: 'budget-maps:route-updated' } as const
+const ZOOM_CHANNELS = { get: 'zoom:get', set: 'zoom:set', changed: 'zoom:changed' } as const
 
 const WHATSAPP_CHANNELS = {
   listProfiles: 'whatsapp:list-profiles', createProfile: 'whatsapp:create-profile',
@@ -90,6 +93,22 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, command: ShortcutCommand) => callback(command)
       ipcRenderer.on(VIEW_CHANNELS.shortcut, listener)
       return () => ipcRenderer.removeListener(VIEW_CHANNELS.shortcut, listener)
+    },
+  },
+  budgetMaps: {
+    onRouteUpdated: (callback: (payload: BudgetMapsRoutePayload) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: BudgetMapsRoutePayload) => callback(payload)
+      ipcRenderer.on(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
+      return () => ipcRenderer.removeListener(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
+    },
+  },
+  zoom: {
+    get: () => ipcRenderer.invoke(ZOOM_CHANNELS.get) as Promise<number>,
+    set: (factor: number) => ipcRenderer.invoke(ZOOM_CHANNELS.set, factor) as Promise<number>,
+    onChanged: (callback: (factor: number) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, factor: number) => callback(factor)
+      ipcRenderer.on(ZOOM_CHANNELS.changed, listener)
+      return () => ipcRenderer.removeListener(ZOOM_CHANNELS.changed, listener)
     },
   },
   whatsapp: {

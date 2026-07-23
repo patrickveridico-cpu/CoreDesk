@@ -10,21 +10,29 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; margin: 0; }
-body { min-width: 1100px; min-height: 700px; overflow: hidden; background: #0b0e12; }
+html, body, #root { width: 100%; height: 100%; min-height: 0; margin: 0; }
+body { min-width: 0; min-height: 0; overflow: hidden; background: #0b0e12; }
 button { font: inherit; }
 
-.operations-table-embedded > main > nav { display: none; }
-.operations-table-embedded > main > section { padding: 0; }
-.operations-table-embedded { min-height: 100%; animation: content-enter 180ms ease-out; }
 .operations-top-navigation { position: relative; z-index: 1; width: 100%; }
-.operations-top-navigation + section { width: 100%; flex: 1 1 auto; }
+main:has(> .operations-top-navigation) { height: 100%; min-height: 0; overflow: hidden; }
+.operations-top-navigation { flex: 0 0 auto; min-height: 0; }
+.operations-top-navigation + section { width: 100%; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+.operations-top-navigation ~ section > .budget-page { height: 100%; min-height: 0; }
+.budget-page { display: flex !important; height: 100%; min-height: 0; gap: .75rem; overflow: hidden; }
+.budget-page > div { display: flex; min-width: 0; min-height: 0; flex: 1 1 0%; flex-direction: column; overflow: hidden; }
+.budget-page > div > section:last-child { min-height: 0; flex: 1 1 0%; overflow: hidden; }
+.budget-page > .budget-summary { width: 360px; min-width: 360px; min-height: 0; flex: 0 0 360px; overflow-y: auto; }
+.budget-summary { display: flex; height: 100%; flex-direction: column; }
+.budget-summary > div:last-child:has(> textarea) { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: .75rem; }
+.budget-summary > div:last-child:has(> textarea) > textarea { width: 100%; min-height: 220px; flex: 1 1 auto; resize: none; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+.budget-summary > div:last-child:has(> textarea) > div { flex: 0 0 auto; }
 .module-button { transition: transform 160ms ease, background-color 160ms ease, color 160ms ease; }
 .module-button:active { transform: scale(.92); }
 .unread-badge { animation: unread-pulse 2.4s ease-in-out infinite; }
 @keyframes unread-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, .15); } 50% { box-shadow: 0 0 0 3px rgba(34, 211, 238, .08); } }
 @keyframes content-enter { from { opacity: .5; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .operations-table-embedded, .module-button, .unread-badge { animation: none; transition: none; } }
+@media (prefers-reduced-motion: reduce) { .module-button, .unread-badge { animation: none; transition: none; } }
 
 /* Shared operational surfaces: compact, high-contrast and calm for long sessions. */
 main [class*="lg:grid-cols"] { gap: 1rem; }

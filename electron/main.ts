@@ -1,14 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
-import type { WebTabDescriptor } from '../shared/contracts'
+import type { BudgetMapsRoutePayload, WebTabDescriptor } from '../shared/contracts'
 import type { CoreConfig } from '../shared/core/contracts'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput } from '../shared/whatsapp'
-import { CORE_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS } from './channels'
+import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
 import { WebViewManager } from './WebViewManager'
 import { createAppServices } from './core/bootstrap/AppServices'
 import type { AppServices } from './core/bootstrap/AppServices'
 import { WhatsAppProfileManager } from './whatsapp/WhatsAppProfileManager'
 import { WhatsAppProfileStore } from './whatsapp/WhatsAppProfileStore'
+import { WhatsAppExternalLinkManager } from './whatsapp/WhatsAppExternalLinkManager'
 
 function logBootstrap(message: string, details?: unknown) {
   if (details === undefined) {
@@ -22,6 +23,14 @@ function describeError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isValidBudgetMapsRoutePayload(value: unknown): value is BudgetMapsRoutePayload {
+  if (!value || typeof value !== 'object') return false
+  const payload = value as Partial<BudgetMapsRoutePayload>
+  const validNumber = (item: unknown, min = 0, max = 100000) => item === null || (typeof item === 'number' && Number.isFinite(item) && item >= min && item <= max)
+  const validText = (item: unknown, maxLength: number) => item === null || (typeof item === 'string' && item.length <= maxLength)
+  return validNumber(payload.distanceKm) && validText(payload.distanceText, 200) && validText(payload.durationText, 200) && validNumber(payload.durationMinutes, 0, 100000) && validText(payload.routeText, 500) && validText(payload.origin, 300) && validText(payload.destination, 300) && (payload.hasTolls === null || typeof payload.hasTolls === 'boolean') && ['high', 'medium', 'low'].includes(payload.confidence ?? '') && typeof payload.score === 'number' && Number.isFinite(payload.score) && payload.score >= -1000 && payload.score <= 1000 && typeof payload.routeVisible === 'boolean' && payload.source === 'google-maps-dom' && typeof payload.capturedAt === 'string' && payload.capturedAt.length <= 64
+}
+
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('in-process-gpu')
 app.disableHardwareAcceleration()
@@ -29,8 +38,33 @@ app.disableHardwareAcceleration()
 let mainWindow: BrowserWindow | null = null
 let viewManager: WebViewManager | null = null
 let whatsappManager: WhatsAppProfileManager | null = null
+let whatsappExternalLinks: WhatsAppExternalLinkManager | null = null
 let splashWindow: BrowserWindow | null = null
 let appServices: AppServices | null = null
+let lastBudgetMapsRouteKey: string | null = null
+let uiZoomFactor = 1
+
+function normalizeZoomFactor(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.7 || value > 1.5) return null
+  return Math.round(value * 10) / 10
+}
+
+function applyZoomFactor(factor: number) {
+  uiZoomFactor = factor
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.setZoomFactor(factor)
+    mainWindow.webContents.send(ZOOM_CHANNELS.changed, factor)
+  }
+  viewManager?.setZoomFactor(factor)
+  whatsappExternalLinks?.setZoomFactor(factor)
+}
+
+function changeZoom(action: 'decrease' | 'reset' | 'increase') {
+  const target = action === 'reset' ? 1 : uiZoomFactor + (action === 'increase' ? 0.1 : -0.1)
+  const normalized = normalizeZoomFactor(Math.min(1.5, Math.max(0.7, target))) ?? 1
+  applyZoomFactor(normalized)
+  void appServices?.storage.write(path.join(app.getPath('userData'), 'coredesk-ui-zoom.json'), normalized, 1)
+}
 
 function emitMaximizedState(window: BrowserWindow) {
   window.webContents.send(WINDOW_CHANNELS.maximizedChanged, window.isMaximized())
@@ -68,6 +102,7 @@ function createWindow() {
       sandbox: !process.env.VITE_DEV_SERVER_URL,
     },
   })
+  mainWindow.webContents.setZoomFactor(uiZoomFactor)
   logBootstrap('Janela principal criada')
 
   mainWindow.once('ready-to-show', () => {
@@ -75,12 +110,113 @@ function createWindow() {
     splashWindow?.close()
     splashWindow = null
   })
-  viewManager = new WebViewManager(mainWindow, (update) => whatsappManager?.handleViewState(update), appServices?.permissions)
+  whatsappExternalLinks = new WhatsAppExternalLinkManager(mainWindow, uiZoomFactor)
+  viewManager = new WebViewManager(mainWindow, (update) => whatsappManager?.handleViewState(update), appServices?.permissions, (payload) => {
+    if (!isValidBudgetMapsRoutePayload(payload) || !mainWindow || mainWindow.isDestroyed()) return
+    const safePayload: BudgetMapsRoutePayload = {
+      distanceKm: payload.distanceKm,
+      distanceText: payload.distanceText,
+      durationText: payload.durationText,
+      durationMinutes: payload.durationMinutes,
+      routeText: payload.routeText,
+      hasTolls: payload.hasTolls,
+      origin: payload.origin,
+      destination: payload.destination,
+      confidence: payload.confidence,
+      score: payload.score,
+      routeVisible: payload.routeVisible,
+      source: payload.source,
+      capturedAt: payload.capturedAt,
+    }
+    const stable = { ...safePayload, capturedAt: undefined }
+    const key = JSON.stringify(stable)
+    if (key === lastBudgetMapsRouteKey) return
+    lastBudgetMapsRouteKey = key
+    console.log('[Budget Maps Route] emitted', { distanceKm: safePayload.distanceKm, distanceText: safePayload.distanceText, durationText: safePayload.durationText, routeText: safePayload.routeText, confidence: safePayload.confidence, score: safePayload.score })
+    mainWindow.webContents.send(BUDGET_MAPS_CHANNELS.routeUpdated, safePayload)
+  }, uiZoomFactor, changeZoom, (url, source) => { whatsappExternalLinks?.handle(url, source) })
   const profileStore = new WhatsAppProfileStore(path.join(app.getPath('userData'), 'whatsapp-profiles.json'), undefined, appServices?.storage)
   whatsappManager = new WhatsAppProfileManager(mainWindow, profileStore, viewManager)
   void whatsappManager.load()
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  mainWindow.webContents.on('did-finish-load', () => logBootstrap('Renderer carregado'))
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!(input.control || input.meta)) return
+    const action = input.key === '-' ? 'decrease' : input.key === '0' ? 'reset' : input.key === '+' || input.key === '=' ? 'increase' : null
+    if (!action) return
+    event.preventDefault()
+    changeZoom(action)
+  })
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log('[CoreDesk Renderer Console]', { level, message, line, sourceId })
+  })
+  mainWindow.webContents.on('dom-ready', () => {
+    void mainWindow?.webContents.executeJavaScript(`(() => {
+      if (window.__coreDeskErrorDiagnosticsInstalled) return
+      window.__coreDeskErrorDiagnosticsInstalled = true
+      window.addEventListener('error', (event) => {
+        const error = event.error
+        console.error('[CoreDesk Window Error]', {
+          message: event.message,
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+          error: error ? { name: error.name, message: error.message, stack: error.stack } : undefined,
+        })
+      })
+      window.addEventListener('unhandledrejection', (event) => {
+        const reason = event.reason
+        console.error('[CoreDesk Unhandled Rejection]', {
+          reason,
+          name: reason?.name,
+          message: reason?.message,
+          stack: reason?.stack,
+        })
+      })
+      return true
+    })()`).catch((error) => logBootstrap('Falha ao instalar diagnóstico global do renderer', describeError(error)))
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.setZoomFactor(uiZoomFactor)
+    viewManager?.setZoomFactor(uiZoomFactor)
+    mainWindow?.webContents.send(ZOOM_CHANNELS.changed, uiZoomFactor)
+    logBootstrap('Renderer carregado')
+    const diagnostics = [100, 700, 2000, 5000]
+    for (const delay of diagnostics) {
+      setTimeout(() => {
+        void (async () => {
+          try {
+            if (!mainWindow || mainWindow.isDestroyed()) return
+            const result = await mainWindow.webContents.executeJavaScript(`(() => {
+              const root = document.getElementById('root')
+              return {
+                href: location.href,
+                documentReadyState: document.readyState,
+                rootExists: Boolean(root),
+                rootChildCount: root?.childElementCount ?? -1,
+                rootInnerHTML: root?.innerHTML.slice(0, 1000) ?? null,
+                bodyInnerHTML: document.body.innerHTML.slice(0, 2000),
+                scriptTags: [...document.scripts].map((script) => ({ src: script.src, type: script.type, async: script.async, defer: script.defer })),
+                modulePreloads: [...document.querySelectorAll('link[rel="modulepreload"]')].map((link) => link.href),
+                resources: performance.getEntriesByType('resource').map((entry) => ({ name: entry.name, initiatorType: entry.initiatorType, duration: entry.duration, transferSize: 'transferSize' in entry ? entry.transferSize : undefined })),
+                viteClientPresent: [...document.scripts].some((script) => script.src.includes('@vite/client')),
+                mainModulePresent: [...document.scripts].some((script) => script.src.includes('/src/main.tsx')),
+              }
+            })()`)
+            console.log(`[CoreDesk React Mount Diagnostic ${delay}ms]`)
+            console.dir(result, { depth: null })
+          } catch (error) {
+            console.error(`[CoreDesk React Mount Diagnostic ${delay}ms] FAILED`, { message: describeError(error) })
+          }
+        })()
+      }, delay)
+    }
+  })
+  mainWindow.webContents.on('did-fail-provisional-load', (_event, errorCode, errorDescription, validatedURL) => console.error('[CoreDesk Renderer did-fail-provisional-load]', { errorCode, errorDescription, validatedURL }))
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => console.error('[CoreDesk Renderer did-fail-load]', { errorCode, errorDescription, validatedURL, isMainFrame }))
+  mainWindow.webContents.on('render-process-gone', (_event, details) => console.error('[CoreDesk Renderer render-process-gone]', details))
+  mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => console.error('[CoreDesk Renderer preload-error]', { preloadPath, name: error.name, message: error.message, stack: error.stack }))
+  mainWindow.webContents.on('unresponsive', () => console.error('[CoreDesk Renderer unresponsive]'))
+  mainWindow.webContents.on('responsive', () => console.log('[CoreDesk Renderer responsive]'))
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     logBootstrap(`Falha ao carregar renderer (${errorCode})`, errorDescription)
   })
@@ -107,6 +243,8 @@ function createWindow() {
     viewManager?.updateBounds()
   })
   mainWindow.on('close', () => {
+    whatsappExternalLinks?.closeAll()
+    whatsappExternalLinks = null
     viewManager?.dispose()
     viewManager = null
     whatsappManager = null
@@ -118,6 +256,7 @@ function createWindow() {
   })
 
   const developmentUrl = process.env.VITE_DEV_SERVER_URL
+  console.log('[CoreDesk Renderer Load Strategy]', { strategy: developmentUrl ? 'loadURL' : 'loadFile', value: developmentUrl ?? path.join(__dirname, '../dist/index.html'), viteDevServerUrlDefined: Boolean(developmentUrl), viteDevServerUrl: developmentUrl ?? null })
   if (developmentUrl) {
     void splashWindow.loadURL(`${developmentUrl}/splash.html`)
     void mainWindow.loadURL(developmentUrl)
@@ -125,6 +264,7 @@ function createWindow() {
     void splashWindow.loadFile(path.join(__dirname, '../dist/splash.html'))
     void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+  mainWindow.webContents.on('did-finish-load', () => console.log('[CoreDesk Renderer URL]', mainWindow?.webContents.getURL()))
 }
 
 function registerWindowControls() {
@@ -142,6 +282,18 @@ function registerWindowControls() {
   ipcMain.handle(WINDOW_CHANNELS.getMaximized, (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false)
 }
 
+function registerZoomControls() {
+  ipcMain.handle(ZOOM_CHANNELS.get, (event) => isTrustedRenderer(event.sender) ? uiZoomFactor : Promise.reject(new Error('Origem IPC não autorizada.')))
+  ipcMain.handle(ZOOM_CHANNELS.set, async (event, value: unknown) => {
+    if (!isTrustedRenderer(event.sender)) throw new Error('Origem IPC não autorizada.')
+    const factor = normalizeZoomFactor(value)
+    if (factor === null) throw new Error('Fator de zoom inválido.')
+    applyZoomFactor(factor)
+    await appServices?.storage.write(path.join(app.getPath('userData'), 'coredesk-ui-zoom.json'), factor, 1)
+    return factor
+  })
+}
+
 function isTrustedRenderer(sender: Electron.WebContents) {
   return mainWindow?.webContents === sender
 }
@@ -154,7 +306,11 @@ function registerViewControls() {
     }
   })
   ipcMain.on(VIEW_CHANNELS.setEmbedded, (event, id: string, bounds: { x: number; y: number; width: number; height: number } | null) => {
-    if (!isTrustedRenderer(event.sender) || id !== 'app-maps') return
+    if (!isTrustedRenderer(event.sender) || !['app-maps', 'budget-google-maps'].includes(id)) return
+    if (bounds && (!Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || bounds.x < 0 || bounds.y < 0 || bounds.width <= 0 || bounds.height <= 0 || bounds.width > 10000 || bounds.height > 10000)) return
+    if (id === 'budget-google-maps') {
+      viewManager?.ensureView({ id, title: 'Google Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-budget-maps', pinned: false, type: 'web' })
+    }
     viewManager?.setEmbedded(id, bounds)
   })
 
@@ -262,12 +418,34 @@ function registerWhatsAppControls() {
   ipcMain.handle(WHATSAPP_CHANNELS.selectIcon, trusted((profileId?: string) => whatsappManager?.selectIcon(profileId)))
 }
 
-app.whenReady().then(() => {
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  logBootstrap('Instância adicional bloqueada')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
+app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return false
   logBootstrap('Electron pronto')
   appServices = createAppServices()
-  return appServices.initialize()
-}).then(() => {
+  await appServices.initialize()
+  uiZoomFactor = await appServices.storage.read(path.join(app.getPath('userData'), 'coredesk-ui-zoom.json'), 1, {
+    schemaVersion: 1,
+    validate: (value) => normalizeZoomFactor(value) ?? 1,
+    backupInvalid: false,
+  })
+  return true
+}).then((initialized) => {
+  if (!initialized) return
   registerWindowControls()
+  registerZoomControls()
   registerViewControls()
   registerWhatsAppControls()
   registerCoreControls()
@@ -286,9 +464,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => { void appServices?.shutdown() })
-app.on('child-process-gone', (_event, details) => {
-  logBootstrap(`Processo filho encerrado (${details.type}/${details.reason})`, details.exitCode)
-})
+app.on('child-process-gone', (_event, details) => console.error('[CoreDesk child-process-gone]', details))
 
 process.on('unhandledRejection', (reason: unknown) => {
   logBootstrap('Promise rejeitada sem tratamento', describeError(reason))

@@ -8,12 +8,14 @@ import { OperationsRepository } from '../repositories/OperationsRepository'
 import { calculateQuoteTotal, selectPricingTable } from '../../../../shared/operations/calculations'
 import type { OperationalCompany, OperationBase, OperationInsurer, OperationQuote, OperationSpecialty, OperationsData, PricingTable, RouteCalculation } from '../../../../shared/operations/models'
 import { emptyOperationsData } from '../../../../shared/operations/schemas'
-import type { OperationsPreview } from '../../../../shared/operations/contracts'
+import type { OperationsPreview, SaveBaseInput, SaveInsurerInput, SavePricingTableInput, SaveSpecialtyInput } from '../../../../shared/operations/contracts'
 import { applyLegacyPriceTableCompanyMigration, detectActivePriceTableConflicts, previewLegacyPriceTableCompanyMigration, resolvePriceTableConflict, type LegacyCompanyMigrationReport } from '../../../../shared/operations/migration'
+import { decideDeletion, getMaintenanceReferences } from '../../../../shared/operations/maintenance'
 
 const uid = () => crypto.randomUUID()
 const text = (value: unknown) => typeof value === 'string' ? value : ''
 const normalizeCompanyName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')
+const maintenanceError = (code: string, message: string) => new Error(`${code}: ${message}`)
 async function parseDb(filePath: string) { try { return (await readFile(filePath, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>) } catch { return [] } }
 
 export class OperationsService {
@@ -33,10 +35,137 @@ export class OperationsService {
   async saveOperationalCompany(input: Partial<OperationalCompany> & Pick<OperationalCompany, 'name' | 'code'>) { const name = input.name.trim().replace(/\s+/g, ' '); const code = input.code.trim().toUpperCase().replace(/\s+/g, '_'); const normalizedName = normalizeCompanyName(name); if (!name || !code) throw new Error('Nome e código são obrigatórios.'); if (name.length > 120 || code.length > 48) throw new Error('Nome ou código excede o limite permitido.'); const duplicate = this.data.operationalCompanies.find((item) => item.id !== input.id && (item.normalizedName === normalizedName || item.code === code)); if (duplicate) throw new Error('Já existe uma empresa com este nome ou código.'); const previous = input.id ? this.data.operationalCompanies.find((item) => item.id === input.id) : undefined; const now = new Date().toISOString(); const item: OperationalCompany = { id: previous?.id ?? uid(), name, normalizedName, code, status: input.status === 'archived' ? 'archived' : previous?.status ?? 'active', notes: input.notes?.trim() || undefined, createdAt: previous?.createdAt ?? now, updatedAt: now, archivedAt: previous?.archivedAt }; this.data.operationalCompanies = [...this.data.operationalCompanies.filter((entry) => entry.id !== item.id), item]; await this.persist(); this.events.emit(previous ? 'operations:operational-company-updated' : 'operations:operational-company-created', { id: item.id, previous, current: item, origin: 'renderer' }); return { ...item } }
   async archiveOperationalCompany(id: string) { const item = this.data.operationalCompanies.find((entry) => entry.id === id); if (!item) throw new Error('Empresa não encontrada.'); const updated = { ...item, status: 'archived' as const, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; this.data.operationalCompanies = this.data.operationalCompanies.map((entry) => entry.id === id ? updated : entry); await this.persist(); this.events.emit('operations:operational-company-archived', { id, previous: item, current: updated, origin: 'renderer' }); return updated }
   async restoreOperationalCompany(id: string) { const item = this.data.operationalCompanies.find((entry) => entry.id === id); if (!item) throw new Error('Empresa não encontrada.'); const updated = { ...item, status: 'active' as const, archivedAt: undefined, updatedAt: new Date().toISOString() }; this.data.operationalCompanies = this.data.operationalCompanies.map((entry) => entry.id === id ? updated : entry); await this.persist(); this.events.emit('operations:operational-company-restored', { id, previous: item, current: updated, origin: 'renderer' }); return updated }
-  async saveBase(input: Partial<OperationBase> & Pick<OperationBase, 'name' | 'address'>) { const item: OperationBase = { id: input.id ?? uid(), name: input.name.trim(), address: input.address.trim(), city: input.city, state: input.state, latitude: input.latitude, longitude: input.longitude, specialties: input.specialties ?? [], status: input.status ?? 'active', notes: input.notes, legacyId: input.legacyId }; if (!item.name || !item.address) throw new Error('Base exige nome e endereço.'); this.data.bases = [...this.data.bases.filter((x) => x.id !== item.id), item]; await this.persist(); this.events.emit(input.id ? 'operations:base-updated' : 'operations:base-created', { id: item.id }); return item }
-  async saveInsurer(input: Partial<OperationInsurer> & Pick<OperationInsurer, 'name'>) { const item: OperationInsurer = { id: input.id ?? uid(), name: input.name.trim(), company: input.company, code: input.code, status: input.status ?? 'active', notes: input.notes, legacyId: input.legacyId }; if (!item.name) throw new Error('Seguradora exige nome.'); this.data.insurers = [...this.data.insurers.filter((x) => x.id !== item.id), item]; await this.persist(); this.events.emit('operations:insurer-created', { id: item.id }); return item }
-  async saveSpecialty(input: Partial<OperationSpecialty> & Pick<OperationSpecialty, 'name'>) { const item: OperationSpecialty = { id: input.id ?? uid(), name: input.name.trim(), category: input.category, status: input.status ?? 'active', legacyId: input.legacyId }; if (!item.name) throw new Error('Especialidade exige nome.'); this.data.specialties = [...this.data.specialties.filter((x) => x.id !== item.id), item]; await this.persist(); return item }
-  async savePricingTable(input: Omit<PricingTable, 'id' | 'status'> & { id?: string }) { if (input.exitValue < 0 || input.kmFranchise < 0 || input.kmValue < 0 || (input.workHourValue ?? 0) < 0) throw new Error('Valores da tabela não podem ser negativos.'); if (!this.data.insurers.some((x) => x.id === input.insurerId) || !this.data.specialties.some((x) => x.id === input.specialtyId)) throw new Error('Seguradora ou especialidade não encontrada.'); const item: PricingTable = { ...input, id: input.id ?? uid(), status: 'active', workHourValue: input.workHourValue ?? 0 }; this.data.pricingTables = [...this.data.pricingTables.filter((x) => x.id !== item.id), item]; await this.persist(); this.events.emit('operations:pricing-table-updated', { id: item.id }); return item }
+  async saveBase(input: SaveBaseInput) {
+    const previous = input.id ? this.data.bases.find((item) => item.id === input.id) : undefined
+    if (input.maintenanceAction === 'delete') {
+      if (!previous) throw maintenanceError('RECORD_NOT_FOUND', 'Base não encontrada.')
+      const decision = decideDeletion('base', previous.name, getMaintenanceReferences(this.data, 'base', previous.id))
+      if (decision.action === 'blocked') throw maintenanceError('RECORD_IN_USE', decision.message)
+      if (decision.action === 'inactivate') {
+        const updated = { ...previous, status: 'inactive' as const, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        this.data.bases = this.data.bases.map((item) => item.id === updated.id ? updated : item)
+        await this.persist()
+        this.events.emit('operations:base-updated', { id: updated.id })
+        return updated
+      }
+      this.data.bases = this.data.bases.filter((item) => item.id !== previous.id)
+      await this.persist()
+      this.events.emit('operations:base-updated', { id: previous.id })
+      return previous
+    }
+    const name = input.name.trim()
+    const address = input.address.trim()
+    const state = input.state?.trim().toUpperCase() || undefined
+    if (!name || !address) throw maintenanceError('VALIDATION_ERROR', 'Nome e endereço são obrigatórios.')
+    if (state && !/^[A-Z]{2}$/.test(state)) throw maintenanceError('VALIDATION_ERROR', 'UF deve possuir duas letras.')
+    if (this.data.bases.some((item) => item.id !== input.id && item.name.trim().toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw maintenanceError('DUPLICATE_CODE', 'Já existe uma Base com este nome.')
+    const now = new Date().toISOString()
+    const status = input.status ?? previous?.status ?? 'active'
+    const item: OperationBase = { id: previous?.id ?? uid(), name, address, city: input.city?.trim() || undefined, state, latitude: input.latitude, longitude: input.longitude, specialties: input.specialties ?? previous?.specialties ?? [], status, notes: input.notes?.trim() || undefined, legacyId: previous?.legacyId ?? input.legacyId, createdAt: previous?.createdAt ?? now, updatedAt: now, archivedAt: status === 'active' ? undefined : previous?.archivedAt ?? now }
+    this.data.bases = [...this.data.bases.filter((entry) => entry.id !== item.id), item]
+    await this.persist()
+    this.events.emit(previous ? 'operations:base-updated' : 'operations:base-created', { id: item.id })
+    return item
+  }
+
+  async saveInsurer(input: SaveInsurerInput) {
+    const previous = input.id ? this.data.insurers.find((item) => item.id === input.id) : undefined
+    if (input.maintenanceAction === 'delete') {
+      if (!previous) throw maintenanceError('RECORD_NOT_FOUND', 'Seguradora não encontrada.')
+      const decision = decideDeletion('insurer', previous.name, getMaintenanceReferences(this.data, 'insurer', previous.id))
+      if (decision.action === 'blocked') throw maintenanceError('RECORD_IN_USE', decision.message)
+      if (decision.action === 'inactivate') {
+        const updated = { ...previous, status: 'inactive' as const, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        this.data.insurers = this.data.insurers.map((item) => item.id === updated.id ? updated : item)
+        await this.persist()
+        this.events.emit('operations:insurer-created', { id: updated.id })
+        return updated
+      }
+      this.data.insurers = this.data.insurers.filter((item) => item.id !== previous.id)
+      await this.persist()
+      this.events.emit('operations:insurer-created', { id: previous.id })
+      return previous
+    }
+    const name = input.name.trim()
+    const code = input.code?.trim().toUpperCase() || undefined
+    if (!name) throw maintenanceError('VALIDATION_ERROR', 'Nome é obrigatório.')
+    if (this.data.insurers.some((item) => item.id !== input.id && item.name.trim().toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw maintenanceError('DUPLICATE_RECORD', 'Já existe uma Seguradora com este nome.')
+    if (code && this.data.insurers.some((item) => item.id !== input.id && item.code?.toUpperCase() === code)) throw maintenanceError('DUPLICATE_CODE', 'Já existe uma Seguradora com este código.')
+    const now = new Date().toISOString()
+    const status = input.status ?? previous?.status ?? 'active'
+    const item: OperationInsurer = { id: previous?.id ?? uid(), name, company: input.company?.trim() || undefined, code, status, notes: input.notes?.trim() || undefined, legacyId: previous?.legacyId ?? input.legacyId, createdAt: previous?.createdAt ?? now, updatedAt: now, archivedAt: status === 'active' ? undefined : previous?.archivedAt ?? now }
+    this.data.insurers = [...this.data.insurers.filter((entry) => entry.id !== item.id), item]
+    await this.persist()
+    this.events.emit('operations:insurer-created', { id: item.id })
+    return item
+  }
+
+  async saveSpecialty(input: SaveSpecialtyInput) {
+    const previous = input.id ? this.data.specialties.find((item) => item.id === input.id) : undefined
+    if (input.maintenanceAction === 'delete') {
+      if (!previous) throw maintenanceError('RECORD_NOT_FOUND', 'Especialidade não encontrada.')
+      const decision = decideDeletion('specialty', previous.name, getMaintenanceReferences(this.data, 'specialty', previous.id))
+      if (decision.action === 'blocked') throw maintenanceError('RECORD_IN_USE', decision.message)
+      if (decision.action === 'inactivate') {
+        const updated = { ...previous, status: 'inactive' as const, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        this.data.specialties = this.data.specialties.map((item) => item.id === updated.id ? updated : item)
+        await this.persist()
+        return updated
+      }
+      this.data.specialties = this.data.specialties.filter((item) => item.id !== previous.id)
+      await this.persist()
+      return previous
+    }
+    const name = input.name.trim()
+    if (!name) throw maintenanceError('VALIDATION_ERROR', 'Nome é obrigatório.')
+    if (this.data.specialties.some((item) => item.id !== input.id && item.name.trim().toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw maintenanceError('DUPLICATE_CODE', 'Já existe uma Especialidade com este nome.')
+    const now = new Date().toISOString()
+    const status = input.status ?? previous?.status ?? 'active'
+    const item: OperationSpecialty = { id: previous?.id ?? uid(), name, category: input.category?.trim() || undefined, status, legacyId: previous?.legacyId ?? input.legacyId, createdAt: previous?.createdAt ?? now, updatedAt: now, archivedAt: status === 'active' ? undefined : previous?.archivedAt ?? now }
+    this.data.specialties = [...this.data.specialties.filter((entry) => entry.id !== item.id), item]
+    await this.persist()
+    return item
+  }
+
+  async savePricingTable(input: SavePricingTableInput) {
+    const previous = input.id ? this.data.pricingTables.find((item) => item.id === input.id) : undefined
+    if (input.maintenanceAction === 'delete') {
+      if (!previous) throw maintenanceError('RECORD_NOT_FOUND', 'Tabela não encontrada.')
+      const decision = decideDeletion('pricing-table', `a tabela ${previous.legacyId ?? previous.id}`, getMaintenanceReferences(this.data, 'pricing-table', previous.id))
+      if (decision.action === 'inactivate') {
+        const updated = { ...previous, status: 'inactive' as const, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        this.data.pricingTables = this.data.pricingTables.map((item) => item.id === updated.id ? updated : item)
+        await this.persist()
+        this.events.emit('operations:pricing-table-updated', { id: updated.id })
+        return updated
+      }
+      this.data.pricingTables = this.data.pricingTables.filter((item) => item.id !== previous.id)
+      await this.persist()
+      this.events.emit('operations:pricing-table-updated', { id: previous.id })
+      return previous
+    }
+    const values = [input.exitValue, input.kmFranchise, input.kmValue, input.workHourValue ?? 0]
+    if (!values.every((value) => Number.isFinite(value) && value >= 0)) throw maintenanceError('VALIDATION_ERROR', 'Valores da tabela devem ser finitos e não negativos.')
+    const insurer = this.data.insurers.find((item) => item.id === input.insurerId)
+    const specialty = this.data.specialties.find((item) => item.id === input.specialtyId)
+    const company = input.companyId ? this.data.operationalCompanies.find((item) => item.id === input.companyId) : undefined
+    if (!previous && !input.companyId) throw maintenanceError('VALIDATION_ERROR', 'Empresa é obrigatória.')
+    if (!insurer || !specialty || (input.companyId && !company)) throw maintenanceError('RELATED_RECORD_NOT_FOUND', 'Empresa, Seguradora ou Especialidade não encontrada.')
+    const referencesChanged = !previous || previous.companyId !== input.companyId || previous.insurerId !== input.insurerId || previous.specialtyId !== input.specialtyId || (previous.status !== 'active' && (input.status ?? 'active') === 'active')
+    if (referencesChanged && (insurer.status !== 'active' || specialty.status !== 'active' || company?.status !== 'active')) throw maintenanceError('INACTIVE_REFERENCE', 'Empresa, Seguradora e Especialidade devem estar ativas.')
+    if (input.validFrom && input.validUntil && new Date(input.validFrom) > new Date(input.validUntil)) throw maintenanceError('VALIDATION_ERROR', 'A vigência inicial não pode ser posterior à vigência final.')
+    const status = input.status ?? previous?.status ?? 'active'
+    const combinationChanged = !previous || previous.companyId !== input.companyId || previous.insurerId !== input.insurerId || previous.specialtyId !== input.specialtyId || (previous.status !== 'active' && status === 'active')
+    if (status === 'active' && combinationChanged && this.data.pricingTables.some((item) => item.id !== input.id && item.status === 'active' && item.companyId === input.companyId && item.insurerId === input.insurerId && item.specialtyId === input.specialtyId)) throw maintenanceError('DUPLICATE_COMBINATION', 'Já existe uma Tabela ativa para esta combinação de Empresa, Seguradora e Especialidade.')
+    const now = new Date().toISOString()
+    const { maintenanceAction: _maintenanceAction, ...valuesInput } = input
+    void _maintenanceAction
+    const item: PricingTable = { ...valuesInput, id: previous?.id ?? uid(), status, workHourValue: input.workHourValue ?? 0, legacyId: previous?.legacyId ?? input.legacyId, createdAt: previous?.createdAt ?? input.createdAt ?? now, updatedAt: now, archivedAt: status === 'active' ? undefined : previous?.archivedAt ?? now }
+    this.data.pricingTables = [...this.data.pricingTables.filter((entry) => entry.id !== item.id), item]
+    await this.persist()
+    this.events.emit('operations:pricing-table-updated', { id: item.id })
+    return item
+  }
   calculateRoute(input: { origin: string; destination: string; stops?: string[]; totalKm: number; source?: RouteCalculation['source'] }): RouteCalculation { if (!input.origin.trim() || !input.destination.trim() || !Number.isFinite(input.totalKm) || input.totalKm < 0) throw new Error('Origem, destino e distância válida são obrigatórios.'); const route: RouteCalculation = { origin: input.origin.trim(), destination: input.destination.trim(), stops: input.stops ?? [], totalKm: input.totalKm, provider: input.source === 'manual' ? 'manual' : 'Google Maps', source: input.source ?? 'manual', calculatedAt: new Date().toISOString() }; this.events.emit('operations:route-calculated', { source: route.source, totalKm: route.totalKm }); return route }
   async calculateQuote(input: { insurerId: string; specialtyId: string; baseId: string; origin: string; destination: string; stops?: string[]; route: RouteCalculation; workHours?: number; extras?: number; discount?: number; observations?: string }) { const insurer = this.data.insurers.find((x) => x.id === input.insurerId && x.status === 'active'); const specialty = this.data.specialties.find((x) => x.id === input.specialtyId && x.status === 'active'); const base = this.data.bases.find((x) => x.id === input.baseId && x.status === 'active'); if (!insurer || !specialty || !base) throw new Error('Base, seguradora e especialidade ativas são obrigatórias.'); const table = selectPricingTable(this.data.pricingTables, input.insurerId, input.specialtyId); if (!table) throw new Error('Nenhuma tabela de preço vigente foi encontrada.'); const calculation = calculateQuoteTotal({ kmTotal: input.route.totalKm, table, workHours: input.workHours, extras: input.extras, discount: input.discount }); const quote: OperationQuote = { id: uid(), insurerId: insurer.id, specialtyId: specialty.id, baseId: base.id, origin: input.origin, destination: input.destination, stops: input.stops ?? [], route: input.route, calculation, message: this.generateMessage(insurer, specialty, base, calculation), status: 'draft', observations: input.observations, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; this.events.emit('operations:quote-calculated', { id: quote.id, total: calculation.total }); return { quote, calculation } }
   async saveQuote(quote: OperationQuote) { const saved = { ...quote, status: 'saved' as const, updatedAt: new Date().toISOString() }; this.data.quotes = [saved, ...this.data.quotes.filter((x) => x.id !== saved.id)]; await this.persist(); this.events.emit('operations:quote-saved', { id: saved.id }); return saved }

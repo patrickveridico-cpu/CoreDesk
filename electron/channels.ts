@@ -20,6 +20,16 @@ export const VIEW_CHANNELS = {
   shortcut: 'views:shortcut',
 } as const
 
+export const BUDGET_MAPS_CHANNELS = {
+  routeUpdated: 'budget-maps:route-updated',
+} as const
+
+export const ZOOM_CHANNELS = {
+  get: 'zoom:get',
+  set: 'zoom:set',
+  changed: 'zoom:changed',
+} as const
+
 export const WHATSAPP_CHANNELS = {
   listProfiles: 'whatsapp:list-profiles',
   createProfile: 'whatsapp:create-profile',

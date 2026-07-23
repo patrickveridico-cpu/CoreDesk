@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Home, Map, MessageSquare, Pin, Plus, Route, Search, Settings, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Home, Map, MessageSquare, Minus, Pin, Plus, Route, Search, Settings, X } from 'lucide-react'
 import { formatUnreadCount } from '../../shared/whatsapp'
 import { useTabsStore } from '../store/useTabsStore'
 import { useWhatsAppStore } from '../store/useWhatsAppStore'
@@ -9,7 +9,11 @@ import { buildGoogleSearchUrl } from '../utils/moduleNavigation'
 const moduleButton = 'module-button relative grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200'
 
 function WebGuideTabs() {
-  const tabs = useTabsStore((state) => state.tabs.filter((tab) => tab.id === 'app-google' || tab.id === 'app-maps'))
+  const allTabs = useTabsStore((state) => state.tabs)
+  const tabs = useMemo(
+    () => allTabs.filter((tab) => tab.id === 'app-google' || tab.id === 'app-maps'),
+    [allTabs],
+  )
   const activeTabId = useTabsStore((state) => state.activeTabId)
   const openWorkspaceWebTab = useTabsStore((state) => state.openWorkspaceWebTab)
   const toggleWebTabPinned = useTabsStore((state) => state.toggleWebTabPinned)
@@ -24,6 +28,23 @@ function WebGuideTabs() {
       <button onClick={() => toggleWebTabPinned(tab.id as 'app-google' | 'app-maps')} aria-label={tab.pinned ? 'Desafixar guia' : 'Fixar guia'} title={tab.pinned ? 'Desafixar' : 'Fixar'} className={`grid h-6 w-6 place-items-center rounded hover:bg-white/10 ${tab.pinned ? 'text-core-accent' : 'text-slate-600'}`}><Pin size={12} /></button>
       <button onClick={() => closeTab(tab.id)} aria-label={`Fechar ${tab.title}`} title="Fechar" className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-white/10 hover:text-white"><X size={13} /></button>
     </div> })}
+  </div>
+}
+
+function ZoomControls() {
+  const [factor, setFactor] = useState(1)
+  useEffect(() => {
+    let mounted = true
+    void window.coreDesk?.zoom.get().then((value) => { if (mounted) setFactor(value) })
+    const remove = window.coreDesk?.zoom.onChanged(setFactor)
+    return () => { mounted = false; remove?.() }
+  }, [])
+  const setZoom = (value: number) => { void window.coreDesk?.zoom.set(Math.min(1.5, Math.max(0.7, Math.round(value * 10) / 10))).then(setFactor) }
+  const percentage = Math.round(factor * 100)
+  return <div className="flex h-8 shrink-0 items-center rounded-md border border-core-line bg-core-canvas/60" role="group" aria-label="Zoom da interface">
+    <button type="button" onClick={() => setZoom(factor - 0.1)} disabled={factor <= 0.7} className="grid h-8 w-8 place-items-center text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" title="Diminuir zoom (Ctrl+-)" aria-label="Diminuir zoom"><Minus size={13} /></button>
+    <button type="button" onClick={() => setZoom(1)} className="h-8 min-w-12 border-x border-core-line px-2 text-[10px] font-semibold text-slate-300 hover:bg-white/5 hover:text-white" title="Restaurar zoom para 100% (Ctrl+0)" aria-label={`Restaurar zoom para 100%. Zoom atual ${percentage}%`}>{percentage}%</button>
+    <button type="button" onClick={() => setZoom(factor + 0.1)} disabled={factor >= 1.5} className="grid h-8 w-8 place-items-center text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" title="Aumentar zoom (Ctrl++)" aria-label="Aumentar zoom"><Plus size={13} /></button>
   </div>
 }
 
@@ -56,6 +77,7 @@ export function GlobalTopBar() {
     <button onClick={() => openInternalTab('routes', 'Operações')} className={`${moduleButton} ${activeTabId === 'routes' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Operações" aria-label="Operações"><Route size={18} /></button>
     <button onClick={openMaps} className={`${moduleButton} ${activeTabId === 'app-maps' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Abrir Maps" aria-label="Abrir Maps"><Map size={18} /></button>
     <button onClick={openGoogle} className={`${moduleButton} ${activeTabId === 'app-google' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Abrir Google" aria-label="Abrir Google"><Search size={18} /></button>
+    <ZoomControls />
     <button onClick={() => openInternalTab('settings', 'Configurações')} className={`${moduleButton} ${activeTabId === 'settings' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Configurações" aria-label="Configurações"><Settings size={18} /></button>
     {menuProfileId && (() => { const profile = profiles.find((item) => item.id === menuProfileId); if (!profile) return null; return <div onClick={(event) => event.stopPropagation()} className="absolute right-2 top-11 z-50 w-48 rounded-md border border-core-line bg-core-raised p-1 text-xs shadow-2xl"><button onClick={() => void openProfile(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Abrir</button><button onClick={() => { const name = window.prompt('Novo nome', profile.name); if (name) void updateProfile(profile.id, { name }) }} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Renomear</button><button onClick={() => void selectIcon(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Alterar ícone</button><button onClick={() => { const accentColor = window.prompt('Cor hexadecimal', profile.accentColor); if (accentColor) void updateProfile(profile.id, { accentColor }) }} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Alterar cor</button><button onClick={() => void reloadProfile(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Recarregar</button><button onClick={() => void (profile.suspended ? resumeProfile(profile.id) : suspendProfile(profile.id))} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">{profile.suspended ? 'Retomar' : 'Suspender'}</button><button onClick={() => { if (window.confirm('Esta ação desconectará o WhatsApp deste perfil.')) void clearSession(profile.id) }} className="w-full rounded px-2 py-2 text-left text-amber-300 hover:bg-amber-500/10">Sair da conta</button><button onClick={() => void remove(profile.id)} className="w-full rounded px-2 py-2 text-left text-red-400 hover:bg-red-500/10">Remover perfil</button></div> })()}
   </aside>
