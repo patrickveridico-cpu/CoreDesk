@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { NewTabRequest, WebViewStateUpdate, WorkspaceTab } from '../../shared/contracts'
+import { CORECHAT_VIEW_ID } from '../../shared/corechat'
 import type { WhatsAppProfile, WhatsAppProfileState } from '../../shared/whatsapp'
 import { WHATSAPP_URL } from '../../shared/whatsapp'
-import { CORECHAT_PARTITION, CORECHAT_URL, CORECHAT_VIEW_ID } from '../../shared/corechat'
 
 const cleanWebState = {
   loading: false,
@@ -43,9 +43,20 @@ interface TabsState {
   selectByIndex: (index: number) => void
   selectRelative: (offset: number) => void
   applyWebViewState: (update: WebViewStateUpdate) => void
-  openWorkspaceWebTab: (id: 'app-google' | 'app-maps' | typeof CORECHAT_VIEW_ID) => void
+  openWorkspaceWebTab: (id: 'app-google' | 'app-maps') => void
   toggleWebTabPinned: (id: 'app-google' | 'app-maps') => void
   previousTabIds: Record<string, string>
+}
+
+export function migratePersistedTabsState(persistedState: unknown) {
+  if (!persistedState || typeof persistedState !== 'object') return persistedState
+  const persisted = persistedState as Partial<Pick<TabsState, 'tabs' | 'activeTabId'>>
+  if (!Array.isArray(persisted.tabs)) return persistedState
+  const tabs = persisted.tabs.filter((tab) => tab.id !== CORECHAT_VIEW_ID)
+  const activeTabId = persisted.activeTabId === CORECHAT_VIEW_ID
+    ? (tabs.find((tab) => tab.id === 'home')?.id ?? tabs[0]?.id ?? 'home')
+    : persisted.activeTabId
+  return { ...persistedState, tabs, activeTabId }
 }
 
 function createWebTab(request: Partial<NewTabRequest> = {}): WorkspaceTab {
@@ -198,16 +209,15 @@ export const useTabsStore = create<TabsState>()(
         if (state.tabs.some((tab) => tab.id === id)) return { activeTabId: id, previousTabIds: { ...state.previousTabIds, [id]: state.activeTabId } }
         const tab: WorkspaceTab = id === 'app-google'
           ? { id, type: 'web', title: 'Google', url: 'https://www.google.com', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
-          : id === 'app-maps'
-            ? { id, type: 'web', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
-            : { id: CORECHAT_VIEW_ID, type: 'web', title: 'CoreChat', fixedTitle: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, closable: false, pinned: true, ...cleanWebState }
+          : { id, type: 'web', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
         return tab ? { tabs: [...state.tabs, tab], activeTabId: id, previousTabIds: { ...state.previousTabIds, [id]: state.activeTabId } } : state
       }),
       toggleWebTabPinned: (id) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id ? { ...tab, pinned: !tab.pinned } : tab) })),
     }),
     {
       name: 'coredesk-workspace',
-      version: 2,
+      version: 3,
+      migrate: migratePersistedTabsState,
       partialize: ({ tabs, activeTabId }) => ({
         tabs: tabs.map((tab) => ({
           ...tab,

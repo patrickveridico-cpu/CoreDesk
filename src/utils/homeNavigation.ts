@@ -1,16 +1,11 @@
 import { useTabsStore } from '../store/useTabsStore'
-import { CORECHAT_VIEW_ID } from '../../shared/corechat'
 
 export type HomeQuickAction = 'new-budget' | 'whatsapp' | 'maps' | 'operations'
 
 export interface HomeNavigation {
   executeCommand: (id: string) => void | Promise<unknown>
   openInternalTab: (id: 'communication' | 'routes', title: string) => void
-  openWorkspaceWebTab: (id: 'app-maps' | typeof CORECHAT_VIEW_ID) => void
-}
-
-export function openCoreChatFromHome(navigation = currentNavigation()) {
-  navigation.openWorkspaceWebTab(CORECHAT_VIEW_ID)
+  openWorkspaceWebTab: (id: 'app-maps') => void
 }
 
 function currentNavigation(): HomeNavigation {

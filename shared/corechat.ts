@@ -2,6 +2,21 @@ export const CORECHAT_VIEW_ID = 'coredesk-corechat'
 export const CORECHAT_URL = 'https://chatgpt.com/'
 export const CORECHAT_PARTITION = 'persist:coredesk-corechat'
 
+export type CoreChatPanelPhase = 'closed' | 'opening' | 'open' | 'closing'
+export type CoreChatPanelEvent = 'open' | 'frame' | 'close' | 'transition-end'
+
+export function reduceCoreChatPanelPhase(
+  phase: CoreChatPanelPhase,
+  event: CoreChatPanelEvent,
+  reducedMotion = false,
+): CoreChatPanelPhase {
+  if (event === 'open') return reducedMotion ? 'open' : 'opening'
+  if (event === 'frame' && phase === 'opening') return 'open'
+  if (event === 'close') return reducedMotion ? 'closed' : 'closing'
+  if (event === 'transition-end' && phase === 'closing') return 'closed'
+  return phase
+}
+
 export interface CoreChatCompactResult {
   enabled: boolean
   applied: boolean

@@ -100,7 +100,7 @@ export class WebViewManager {
 
     for (const id of this.views.keys()) {
       const existing = this.views.get(id)
-      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps' && id !== 'budget-google-maps') {
+      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps' && id !== 'budget-google-maps' && id !== CORECHAT_VIEW_ID) {
         this.destroy(id)
       }
     }

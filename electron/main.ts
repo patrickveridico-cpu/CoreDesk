@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { BudgetMapsRoutePayload, WebTabDescriptor } from '../shared/contracts'
 import type { CoreConfig } from '../shared/core/contracts'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput } from '../shared/whatsapp'
+import { CORECHAT_PARTITION, CORECHAT_URL, CORECHAT_VIEW_ID } from '../shared/corechat'
 import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, CORECHAT_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
 import { WebViewManager } from './WebViewManager'
 import { createAppServices } from './core/bootstrap/AppServices'
@@ -320,10 +321,13 @@ function registerViewControls() {
     }
   })
   ipcMain.on(VIEW_CHANNELS.setEmbedded, (event, id: string, bounds: { x: number; y: number; width: number; height: number } | null) => {
-    if (!isTrustedRenderer(event.sender) || !['app-maps', 'budget-google-maps'].includes(id)) return
+    if (!isTrustedRenderer(event.sender) || !['app-maps', 'budget-google-maps', CORECHAT_VIEW_ID].includes(id)) return
     if (bounds && (!Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || bounds.x < 0 || bounds.y < 0 || bounds.width <= 0 || bounds.height <= 0 || bounds.width > 10000 || bounds.height > 10000)) return
     if (id === 'budget-google-maps') {
       viewManager?.ensureView({ id, title: 'Google Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-budget-maps', pinned: false, type: 'web' })
+    }
+    if (id === CORECHAT_VIEW_ID && bounds) {
+      viewManager?.ensureView({ id, title: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, pinned: true, type: 'web' })
     }
     viewManager?.setEmbedded(id, bounds)
   })

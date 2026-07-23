@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getGreeting } from '../shared/core/home'
 import { HomePage } from '../src/components/HomePage'
 import { useAppearanceStore } from '../src/store/useAppearanceStore'
-import { openCoreChatFromHome, runHomeQuickAction, type HomeNavigation } from '../src/utils/homeNavigation'
+import { runHomeQuickAction, type HomeNavigation } from '../src/utils/homeNavigation'
 
 describe('CoreDesk home copy', () => {
   it('greets by local time', () => {
@@ -50,21 +50,20 @@ describe('CoreDesk home copy', () => {
     ])
   })
 
-  it('opens CoreChat through the existing workspace navigation without a fake prompt', () => {
+  it('prepares CoreChat as an embedded Home panel without a technical workspace tab', () => {
     const markup = renderToStaticMarkup(createElement(HomePage))
-    const calls: string[] = []
-    const navigation: HomeNavigation = {
-      executeCommand: vi.fn(),
-      openInternalTab: vi.fn(),
-      openWorkspaceWebTab: (id) => { calls.push(id) },
-    }
-    openCoreChatFromHome(navigation)
-    expect(calls).toEqual(['coredesk-corechat'])
+    const homeSource = readFileSync('src/components/HomePage.tsx', 'utf8')
     expect(markup).toContain('Abrir CoreChat')
     expect(markup).toContain('Pesquisas rápidas com ChatGPT')
     expect(markup).not.toContain('Em breve')
     expect(markup).not.toContain('Pergunte qualquer coisa ao CoreChat')
     expect(markup).not.toContain('<iframe')
+    expect(markup).toContain('aria-expanded="false"')
+    expect(markup).toContain('aria-controls="corechat-panel"')
+    expect(markup).toContain('id="corechat-panel"')
+    expect(markup).toContain('aria-hidden="true"')
+    expect(homeSource).not.toContain('openWorkspaceWebTab')
+    expect(homeSource).not.toContain('openCoreChatFromHome')
   })
 
   it('shows only real appearance preferences in system status', () => {

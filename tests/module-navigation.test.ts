@@ -20,5 +20,6 @@ describe('module navigation contracts', () => {
   it('converts the real panel rectangle into integer WebContentsView bounds', () => {
     expect(toEmbeddedBounds({ left: 10.6, top: 48.4, width: 900.7, height: 500.2 })).toEqual({ x: 11, y: 48, width: 901, height: 500 })
     expect(toEmbeddedBounds({ left: 0, top: 0, width: 1200, height: 700 })).toEqual({ x: 0, y: 0, width: 1200, height: 700 })
+    expect(toEmbeddedBounds({ left: 10, top: 20, width: 600, height: 400 }, 1.1)).toEqual({ x: 11, y: 22, width: 660, height: 440 })
   })
 })

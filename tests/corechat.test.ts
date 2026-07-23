@@ -6,7 +6,9 @@ import {
   CORECHAT_VIEW_ID,
   classifyCoreChatNavigation,
   createCoreChatCompactScript,
+  reduceCoreChatPanelPhase,
 } from '../shared/corechat'
+import { migratePersistedTabsState } from '../src/store/useTabsStore'
 
 function runCompactScript(options: { composer?: boolean; sidebar?: boolean; composerVisible?: boolean }, enabled = true) {
   let styleElement: { id: string; textContent: string; remove: () => void } | undefined
@@ -52,6 +54,26 @@ describe('CoreChat navigation policy', () => {
     expect(CORECHAT_PARTITION).toBe('persist:coredesk-corechat')
     expect(CORECHAT_PARTITION).not.toBe('persist:coredesk-google')
     expect(CORECHAT_PARTITION).not.toContain('whatsapp')
+  })
+
+  it('moves the embedded panel through reversible transition phases', () => {
+    expect(reduceCoreChatPanelPhase('closed', 'open')).toBe('opening')
+    expect(reduceCoreChatPanelPhase('opening', 'frame')).toBe('open')
+    expect(reduceCoreChatPanelPhase('open', 'close')).toBe('closing')
+    expect(reduceCoreChatPanelPhase('closing', 'transition-end')).toBe('closed')
+    expect(reduceCoreChatPanelPhase('closed', 'open', true)).toBe('open')
+    expect(reduceCoreChatPanelPhase('open', 'close', true)).toBe('closed')
+  })
+
+  it('removes only the legacy visual CoreChat tab from persisted workspace state', () => {
+    const home = { id: 'home', type: 'internal', title: 'Início' }
+    const maps = { id: 'app-maps', type: 'web', title: 'Maps' }
+    const migrated = migratePersistedTabsState({
+      tabs: [home, { id: CORECHAT_VIEW_ID, type: 'web', title: 'CoreChat' }, maps],
+      activeTabId: CORECHAT_VIEW_ID,
+    }) as { tabs: Array<{ id: string }>; activeTabId: string }
+    expect(migrated.tabs).toEqual([home, maps])
+    expect(migrated.activeTabId).toBe('home')
   })
 
   it('allows official and authentication hosts while separating external links', () => {
@@ -113,16 +135,17 @@ class FakeWebContents extends EventEmitter {
   }
   windowOpenHandler?: (details: { url: string }) => { action: string; overrideBrowserWindowOptions?: Electron.BrowserWindowConstructorOptions }
   currentUrl = ''
+  destroyed = false
   setZoomFactor() {}
   setUserAgent() {}
   setAudioMuted() {}
-  isDestroyed() { return false }
+  isDestroyed() { return this.destroyed }
   isLoading() { return false }
   getURL() { return this.currentUrl }
   async loadURL(url: string) { this.currentUrl = url }
   reload() {}
   stop() {}
-  close() {}
+  close() { this.destroyed = true }
   setWindowOpenHandler(handler: typeof this.windowOpenHandler) { this.windowOpenHandler = handler }
   async executeJavaScript(script: string) {
     return script.includes('if (!false)')
@@ -133,10 +156,11 @@ class FakeWebContents extends EventEmitter {
 
 class FakeView {
   readonly webContents = new FakeWebContents()
+  bounds?: { x: number; y: number; width: number; height: number }
   constructor(readonly options: Electron.WebContentsViewConstructorOptions) {
     fakeState.views.push(this)
   }
-  setBounds() {}
+  setBounds(bounds: { x: number; y: number; width: number; height: number }) { this.bounds = bounds }
 }
 
 vi.mock('electron', () => ({
@@ -147,7 +171,7 @@ vi.mock('electron', () => ({
 }))
 
 describe('CoreChat WebContentsView', () => {
-  it('creates an isolated secure view and keeps Maps and WhatsApp partitions independent', async () => {
+  it('embeds, hides, and reuses an isolated secure view without becoming the active workspace tab', async () => {
     fakeState.views.length = 0
     const { WebViewManager } = await import('../electron/WebViewManager')
     const externalLink = vi.fn()
@@ -159,11 +183,13 @@ describe('CoreChat WebContentsView', () => {
     }
     const permissions = { configureSession: vi.fn(), isAllowedUrl: () => true }
     const manager = new WebViewManager(window as never, undefined, permissions as never, undefined, 1, undefined, externalLink)
-    manager.sync([
+    manager.ensureView(
       { id: CORECHAT_VIEW_ID, title: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, pinned: true, type: 'web' },
+    )
+    manager.sync([
       { id: 'app-maps', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', pinned: false, type: 'web' },
       { id: 'whatsapp:p1', profileId: 'p1', title: 'Perfil', url: 'https://web.whatsapp.com/', partition: 'persist:whatsapp-p1', pinned: true, type: 'whatsapp' },
-    ], CORECHAT_VIEW_ID)
+    ], 'app-maps')
 
     const coreChat = fakeState.views.find((view) => view.webContents.currentUrl === CORECHAT_URL)
     expect(coreChat?.options.webPreferences).toMatchObject({
@@ -179,6 +205,20 @@ describe('CoreChat WebContentsView', () => {
       'persist:coredesk-google',
       'persist:whatsapp-p1',
     ])
+
+    const bounds = { x: 510, y: 130, width: 680, height: 620 }
+    manager.setEmbedded(CORECHAT_VIEW_ID, bounds)
+    expect(coreChat?.bounds).toEqual(bounds)
+    expect(window.contentView.addChildView).toHaveBeenCalledWith(coreChat)
+
+    manager.setEmbedded(CORECHAT_VIEW_ID, null)
+    expect(window.contentView.removeChildView).toHaveBeenCalledWith(coreChat)
+    expect(coreChat?.webContents.destroyed).toBe(false)
+
+    const createdViewCount = fakeState.views.length
+    manager.setEmbedded(CORECHAT_VIEW_ID, bounds)
+    expect(fakeState.views).toHaveLength(createdViewCount)
+    expect(window.contentView.addChildView.mock.calls.filter(([view]) => view === coreChat)).toHaveLength(2)
 
     expect(coreChat?.webContents.windowOpenHandler?.({ url: 'https://accounts.google.com/o/oauth2/auth' })).toMatchObject({
       action: 'allow',

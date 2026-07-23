@@ -21,6 +21,11 @@ export function shouldReuseWebView(previousId: string | null, targetId: string) 
   return previousId === targetId
 }
 
-export function toEmbeddedBounds(rect: { left: number; top: number; width: number; height: number }) {
-  return { x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) }
+export function toEmbeddedBounds(rect: { left: number; top: number; width: number; height: number }, scale = 1) {
+  return {
+    x: Math.round(rect.left * scale),
+    y: Math.round(rect.top * scale),
+    width: Math.max(0, Math.round(rect.width * scale)),
+    height: Math.max(0, Math.round(rect.height * scale)),
+  }
 }
