@@ -59,6 +59,28 @@ export function migratePersistedTabsState(persistedState: unknown) {
   return { ...persistedState, tabs, activeTabId }
 }
 
+export function normalizeTabsStateForBootstrap(persistedState: unknown) {
+  if (!persistedState || typeof persistedState !== 'object') {
+    return { tabs: initialTabs, activeTabId: 'home' }
+  }
+  const persisted = persistedState as Partial<Pick<TabsState, 'tabs' | 'activeTabId'>>
+  const persistedTabs = Array.isArray(persisted.tabs) ? persisted.tabs : initialTabs
+  const workspaceTabs = persistedTabs.filter((tab) => tab.id !== CORECHAT_VIEW_ID)
+  const persistedHome = workspaceTabs.find((tab) => tab.id === 'home')
+  const homeTab: WorkspaceTab = {
+    ...initialTabs[0],
+    ...persistedHome,
+    id: 'home',
+    type: 'internal',
+    title: persistedHome?.title ?? initialTabs[0].title,
+    closable: false,
+    pinned: true,
+    ...cleanWebState,
+  }
+  const tabs = [homeTab, ...workspaceTabs.filter((tab) => tab.id !== 'home')]
+  return { ...persistedState, tabs, activeTabId: 'home' }
+}
+
 function createWebTab(request: Partial<NewTabRequest> = {}): WorkspaceTab {
   return {
     id: crypto.randomUUID(),
@@ -218,6 +240,10 @@ export const useTabsStore = create<TabsState>()(
       name: 'coredesk-workspace',
       version: 3,
       migrate: migratePersistedTabsState,
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...normalizeTabsStateForBootstrap(persistedState),
+      }),
       partialize: ({ tabs, activeTabId }) => ({
         tabs: tabs.map((tab) => ({
           ...tab,

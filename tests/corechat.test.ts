@@ -6,9 +6,10 @@ import {
   CORECHAT_VIEW_ID,
   classifyCoreChatNavigation,
   createCoreChatCompactScript,
+  createCoreChatFocusScript,
   reduceCoreChatPanelPhase,
 } from '../shared/corechat'
-import { migratePersistedTabsState } from '../src/store/useTabsStore'
+import { migratePersistedTabsState, normalizeTabsStateForBootstrap } from '../src/store/useTabsStore'
 
 function runCompactScript(options: { composer?: boolean; sidebar?: boolean; composerVisible?: boolean }, enabled = true) {
   let styleElement: { id: string; textContent: string; remove: () => void } | undefined
@@ -25,7 +26,7 @@ function runCompactScript(options: { composer?: boolean; sidebar?: boolean; comp
   } : undefined
   const documentMock = {
     getElementById: () => styleElement,
-    querySelector: (selector: string) => selector.startsWith('main ') ? composer : sidebar,
+    querySelector: (selector: string) => selector.includes('textarea') || selector.includes('contenteditable') ? composer : sidebar,
     querySelectorAll: () => sidebar && attributes.has('data-coredesk-compact-hidden') ? [sidebar] : [],
     createElement: () => {
       const created = {
@@ -50,7 +51,7 @@ function runCompactScript(options: { composer?: boolean; sidebar?: boolean; comp
 describe('CoreChat navigation policy', () => {
   it('uses a dedicated persistent session and official initial URL', () => {
     expect(CORECHAT_VIEW_ID).toBe('coredesk-corechat')
-    expect(CORECHAT_URL).toBe('https://chatgpt.com/')
+    expect(CORECHAT_URL).toBe('https://quillbot.com/pt/chat-ia')
     expect(CORECHAT_PARTITION).toBe('persist:coredesk-corechat')
     expect(CORECHAT_PARTITION).not.toBe('persist:coredesk-google')
     expect(CORECHAT_PARTITION).not.toContain('whatsapp')
@@ -58,7 +59,7 @@ describe('CoreChat navigation policy', () => {
 
   it('moves the embedded panel through reversible transition phases', () => {
     expect(reduceCoreChatPanelPhase('closed', 'open')).toBe('opening')
-    expect(reduceCoreChatPanelPhase('opening', 'frame')).toBe('open')
+    expect(reduceCoreChatPanelPhase('opening', 'transition-end')).toBe('open')
     expect(reduceCoreChatPanelPhase('open', 'close')).toBe('closing')
     expect(reduceCoreChatPanelPhase('closing', 'transition-end')).toBe('closed')
     expect(reduceCoreChatPanelPhase('closed', 'open', true)).toBe('open')
@@ -76,16 +77,45 @@ describe('CoreChat navigation policy', () => {
     expect(migrated.activeTabId).toBe('home')
   })
 
+  it('starts on Home without losing or duplicating persisted workspace tabs', () => {
+    const whatsapp = { id: 'whatsapp:p1', type: 'whatsapp', title: 'Comercial' }
+    const maps = { id: 'app-maps', type: 'web', title: 'Maps' }
+    const state = normalizeTabsStateForBootstrap({
+      tabs: [
+        whatsapp,
+        { id: 'home', type: 'internal', title: 'Início' },
+        maps,
+        { id: 'home', type: 'internal', title: 'Início duplicado' },
+        { id: CORECHAT_VIEW_ID, type: 'web', title: 'CoreChat legado' },
+      ],
+      activeTabId: whatsapp.id,
+    }) as { tabs: Array<{ id: string }>; activeTabId: string }
+
+    expect(state.activeTabId).toBe('home')
+    expect(state.tabs.filter((tab) => tab.id === 'home')).toHaveLength(1)
+    expect(state.tabs.filter((tab) => tab.id === whatsapp.id)).toHaveLength(1)
+    expect(state.tabs.filter((tab) => tab.id === maps.id)).toHaveLength(1)
+    expect(state.tabs.some((tab) => tab.id === CORECHAT_VIEW_ID)).toBe(false)
+
+    const nextBootstrap = normalizeTabsStateForBootstrap({
+      ...state,
+      activeTabId: maps.id,
+    }) as { tabs: Array<{ id: string }>; activeTabId: string }
+    expect(nextBootstrap.activeTabId).toBe('home')
+    expect(nextBootstrap.tabs.map((tab) => tab.id)).toEqual(state.tabs.map((tab) => tab.id))
+  })
+
   it('allows official and authentication hosts while separating external links', () => {
-    expect(classifyCoreChatNavigation('https://chatgpt.com/c/123').action).toBe('allow-internal')
-    expect(classifyCoreChatNavigation('https://auth.openai.com/authorize').action).toBe('allow-internal')
+    expect(classifyCoreChatNavigation('https://quillbot.com/pt/chat-ia').action).toBe('allow-internal')
+    expect(classifyCoreChatNavigation('https://assets.quillbot.com/app.js').action).toBe('allow-internal')
     expect(classifyCoreChatNavigation('https://accounts.google.com/o/oauth2/v2/auth').action).toBe('allow-auth')
-    expect(classifyCoreChatNavigation('https://login.microsoftonline.com/common/oauth2').action).toBe('allow-auth')
+    expect(classifyCoreChatNavigation('https://appleid.apple.com/auth/authorize').action).toBe('allow-auth')
+    expect(classifyCoreChatNavigation('https://www.facebook.com/login').action).toBe('allow-auth')
     expect(classifyCoreChatNavigation('https://example.com/result').action).toBe('open-external')
   })
 
   it('blocks dangerous and invalid protocols', () => {
-    for (const url of ['javascript:alert(1)', 'data:text/html,test', 'file:///C:/secret.txt', 'not a url']) {
+    for (const url of ['javascript:alert(1)', 'data:text/html,test', 'file:///C:/secret.txt', 'filesystem:https://quillbot.com/temp', 'not a url']) {
       expect(classifyCoreChatNavigation(url).action).toBe('block')
     }
   })
@@ -97,6 +127,23 @@ describe('CoreChat compact mode', () => {
     expect(execution.result).toMatchObject({ enabled: true, applied: false, reason: 'composer-not-found' })
     expect(execution.hasStyle).toBe(false)
     expect(execution.attributes.size).toBe(0)
+  })
+
+  it('focuses an available semantic composer without inserting or sending content', () => {
+    const composer = {
+      disabled: false,
+      focus: vi.fn(),
+      getBoundingClientRect: () => ({ width: 640, height: 48 }),
+    }
+    const documentMock = {
+      activeElement: composer,
+      querySelector: (selector: string) => selector.startsWith('main ') ? composer : undefined,
+    }
+    const getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' })
+    const execute = new Function('document', 'getComputedStyle', `return ${createCoreChatFocusScript()}`)
+    expect(execute(documentMock, getComputedStyle)).toEqual({ focused: true, reason: 'focused' })
+    expect(composer.focus).toHaveBeenCalledOnce()
+    expect(composer.focus).toHaveBeenCalledWith({ preventScroll: true })
   })
 
   it('hides only identified secondary navigation when essentials remain visible', () => {
@@ -136,6 +183,7 @@ class FakeWebContents extends EventEmitter {
   windowOpenHandler?: (details: { url: string }) => { action: string; overrideBrowserWindowOptions?: Electron.BrowserWindowConstructorOptions }
   currentUrl = ''
   destroyed = false
+  executedScripts: string[] = []
   setZoomFactor() {}
   setUserAgent() {}
   setAudioMuted() {}
@@ -148,6 +196,8 @@ class FakeWebContents extends EventEmitter {
   close() { this.destroyed = true }
   setWindowOpenHandler(handler: typeof this.windowOpenHandler) { this.windowOpenHandler = handler }
   async executeJavaScript(script: string) {
+    this.executedScripts.push(script)
+    if (script.includes('composer.focus')) return { focused: true, reason: 'focused' }
     return script.includes('if (!false)')
       ? { enabled: false, applied: false, reason: 'disabled', hiddenElements: 0 }
       : { enabled: true, applied: true, reason: 'applied', hiddenElements: 1 }
@@ -186,10 +236,11 @@ describe('CoreChat WebContentsView', () => {
     manager.ensureView(
       { id: CORECHAT_VIEW_ID, title: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, pinned: true, type: 'web' },
     )
-    manager.sync([
+    const workspaceViews = [
       { id: 'app-maps', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', pinned: false, type: 'web' },
       { id: 'whatsapp:p1', profileId: 'p1', title: 'Perfil', url: 'https://web.whatsapp.com/', partition: 'persist:whatsapp-p1', pinned: true, type: 'whatsapp' },
-    ], 'app-maps')
+    ] as const
+    manager.sync([...workspaceViews], 'home')
 
     const coreChat = fakeState.views.find((view) => view.webContents.currentUrl === CORECHAT_URL)
     expect(coreChat?.options.webPreferences).toMatchObject({
@@ -205,15 +256,26 @@ describe('CoreChat WebContentsView', () => {
       'persist:coredesk-google',
       'persist:whatsapp-p1',
     ])
+    expect(window.contentView.addChildView).not.toHaveBeenCalled()
 
     const bounds = { x: 510, y: 130, width: 680, height: 620 }
+    manager.setEmbedded(CORECHAT_VIEW_ID, bounds, false)
+    expect(coreChat?.bounds).toEqual(bounds)
+    expect(window.contentView.addChildView).not.toHaveBeenCalledWith(coreChat)
+
     manager.setEmbedded(CORECHAT_VIEW_ID, bounds)
     expect(coreChat?.bounds).toEqual(bounds)
     expect(window.contentView.addChildView).toHaveBeenCalledWith(coreChat)
+    await vi.waitFor(() => {
+      expect(coreChat?.webContents.executedScripts.filter((script) => script.includes('composer.focus'))).toHaveLength(1)
+    })
 
     manager.setEmbedded(CORECHAT_VIEW_ID, null)
     expect(window.contentView.removeChildView).toHaveBeenCalledWith(coreChat)
     expect(coreChat?.webContents.destroyed).toBe(false)
+    manager.sync([...workspaceViews], 'app-maps')
+    const maps = fakeState.views.find((view) => view.webContents.currentUrl.includes('google.com/maps'))
+    expect(window.contentView.addChildView).toHaveBeenCalledWith(maps)
 
     const createdViewCount = fakeState.views.length
     manager.setEmbedded(CORECHAT_VIEW_ID, bounds)

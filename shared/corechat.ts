@@ -1,9 +1,9 @@
 export const CORECHAT_VIEW_ID = 'coredesk-corechat'
-export const CORECHAT_URL = 'https://chatgpt.com/'
+export const CORECHAT_URL = 'https://quillbot.com/pt/chat-ia'
 export const CORECHAT_PARTITION = 'persist:coredesk-corechat'
 
 export type CoreChatPanelPhase = 'closed' | 'opening' | 'open' | 'closing'
-export type CoreChatPanelEvent = 'open' | 'frame' | 'close' | 'transition-end'
+export type CoreChatPanelEvent = 'open' | 'close' | 'transition-end'
 
 export function reduceCoreChatPanelPhase(
   phase: CoreChatPanelPhase,
@@ -11,8 +11,8 @@ export function reduceCoreChatPanelPhase(
   reducedMotion = false,
 ): CoreChatPanelPhase {
   if (event === 'open') return reducedMotion ? 'open' : 'opening'
-  if (event === 'frame' && phase === 'opening') return 'open'
   if (event === 'close') return reducedMotion ? 'closed' : 'closing'
+  if (event === 'transition-end' && phase === 'opening') return 'open'
   if (event === 'transition-end' && phase === 'closing') return 'closed'
   return phase
 }
@@ -28,16 +28,14 @@ export type CoreChatNavigationDecision =
   | { action: 'allow-internal' | 'allow-auth' | 'open-external'; protocol: string; hostname: string }
   | { action: 'block'; protocol: string; hostname: string; reason: string }
 
-const CORECHAT_HOSTS = ['chatgpt.com', 'openai.com', 'oaistatic.com', 'oaiusercontent.com'] as const
+const CORECHAT_HOSTS = ['quillbot.com'] as const
 const AUTH_HOSTS = [
   'accounts.google.com',
   'gstatic.com',
   'googleusercontent.com',
-  'login.microsoftonline.com',
-  'microsoft.com',
-  'login.live.com',
   'appleid.apple.com',
   'apple.com',
+  'facebook.com',
 ] as const
 
 function matchesHost(hostname: string, allowed: readonly string[]) {
@@ -65,17 +63,24 @@ export function classifyCoreChatNavigation(value: string): CoreChatNavigationDec
 }
 
 const COMPOSER_SELECTORS = [
-  'main textarea',
+  'main form textarea:not([disabled])',
+  'main textarea:not([disabled])',
   'main [contenteditable="true"][role="textbox"]',
-  'main [contenteditable="true"]',
+  '[role="main"] form textarea:not([disabled])',
+  '[role="main"] [contenteditable="true"][role="textbox"]',
+  'form textarea:not([disabled])',
+  'form [contenteditable="true"][role="textbox"]',
 ] as const
 
 const SIDEBAR_SELECTORS = [
-  '[data-testid="history-sidebar"]',
+  '[data-testid*="sidebar" i]',
+  '[data-testid*="navigation" i]',
   'aside:has(nav[aria-label*="chat history" i])',
   'nav[aria-label*="chat history" i]',
   'aside:has(nav[aria-label*="histórico" i])',
   'nav[aria-label*="histórico" i]',
+  'aside:has(nav[aria-label*="navegação" i])',
+  'nav[aria-label*="navegação principal" i]',
 ] as const
 
 export function createCoreChatCompactScript(enabled: boolean) {
@@ -121,6 +126,39 @@ export function createCoreChatCompactScript(enabled: boolean) {
         applied: false,
         reason: error instanceof Error ? 'script-error:' + error.name : 'script-error',
         hiddenElements: 0,
+      };
+    }
+  })()`
+}
+
+export function createCoreChatFocusScript() {
+  const composerSelectors = JSON.stringify(COMPOSER_SELECTORS)
+  return `(() => {
+    try {
+      const candidates = ${composerSelectors}
+        .map((selector) => document.querySelector(selector))
+        .filter(Boolean);
+      const composer = candidates.find((element) => {
+        const computed = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        const disabled = 'disabled' in element && Boolean(element.disabled);
+        return !disabled
+          && computed.display !== 'none'
+          && computed.visibility !== 'hidden'
+          && Number(computed.opacity) > 0
+          && rect.width > 0
+          && rect.height > 0;
+      });
+      if (!composer || typeof composer.focus !== 'function') {
+        return { focused: false, reason: 'composer-not-available' };
+      }
+      composer.focus({ preventScroll: true });
+      const focused = document.activeElement === composer;
+      return { focused, reason: focused ? 'focused' : 'focus-rejected' };
+    } catch (error) {
+      return {
+        focused: false,
+        reason: error instanceof Error ? 'focus-error:' + error.name : 'focus-error',
       };
     }
   })()`

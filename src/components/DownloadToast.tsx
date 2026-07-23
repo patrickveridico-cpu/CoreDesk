@@ -17,13 +17,21 @@ function progress(status: DownloadStatus) {
 
 export function DownloadToast() {
   const [status, setStatus] = useState<DownloadStatus>()
+  const [dismissing, setDismissing] = useState(false)
 
-  useEffect(() => window.coreDesk?.downloads.onStatusChanged(setStatus), [])
+  useEffect(() => window.coreDesk?.downloads.onStatusChanged((nextStatus) => {
+    setDismissing(false)
+    setStatus(nextStatus)
+  }), [])
 
   useEffect(() => {
     if (!status || status.state === 'preparing' || status.state === 'progressing') return
-    const timer = window.setTimeout(() => setStatus((current) => current?.id === status.id ? undefined : current), 5000)
-    return () => window.clearTimeout(timer)
+    const exitTimer = window.setTimeout(() => setDismissing(true), 4700)
+    const removeTimer = window.setTimeout(() => setStatus((current) => current?.id === status.id ? undefined : current), 5000)
+    return () => {
+      window.clearTimeout(exitTimer)
+      window.clearTimeout(removeTimer)
+    }
   }, [status])
 
   if (!status) return null
@@ -37,7 +45,7 @@ export function DownloadToast() {
         : Download
 
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-[300] w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-core-line bg-core-raised p-3 text-core-text shadow-2xl">
+    <div role="status" aria-live="polite" data-state={status.state} data-exiting={dismissing} className="download-toast pointer-events-none fixed bottom-4 right-4 z-[300] w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-core-line bg-core-raised p-3 text-core-text">
       <div className="flex min-w-0 items-start gap-2.5">
         <Icon aria-hidden="true" size={18} className="mt-0.5 shrink-0 text-core-accent" />
         <div className="min-w-0 flex-1">
@@ -46,7 +54,7 @@ export function DownloadToast() {
           {status.message && <p className="mt-1 text-[10px] text-core-muted">{status.message}</p>}
           {status.state === 'progressing' && percentage !== undefined && (
             <div className="mt-2 h-1 overflow-hidden rounded-full bg-core-canvas" aria-label={`${percentage}% concluído`}>
-              <div className="h-full rounded-full bg-core-accent transition-[width]" style={{ width: `${percentage}%` }} />
+              <div className="download-progress h-full rounded-full bg-core-accent" style={{ width: `${percentage}%` }} />
             </div>
           )}
         </div>

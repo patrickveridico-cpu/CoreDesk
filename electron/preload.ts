@@ -75,7 +75,11 @@ const api = {
   },
   views: {
     sync: (tabs: WebTabDescriptor[], activeTabId: string) => ipcRenderer.send(VIEW_CHANNELS.sync, tabs, activeTabId),
-    setEmbedded: (id: string, bounds: { x: number; y: number; width: number; height: number } | null) => ipcRenderer.send(VIEW_CHANNELS.setEmbedded, id, bounds),
+    setEmbedded: (
+      id: string,
+      bounds: { x: number; y: number; width: number; height: number } | null,
+      options?: { visible?: boolean },
+    ) => ipcRenderer.send(VIEW_CHANNELS.setEmbedded, id, bounds, options),
     navigate: (id: string, url: string) => ipcRenderer.send(VIEW_CHANNELS.navigate, id, url),
     back: (id: string) => ipcRenderer.send(VIEW_CHANNELS.back, id),
     forward: (id: string) => ipcRenderer.send(VIEW_CHANNELS.forward, id),

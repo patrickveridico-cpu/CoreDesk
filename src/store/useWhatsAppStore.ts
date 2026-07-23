@@ -32,7 +32,7 @@ interface WhatsAppState {
   selectIcon: (profileId?: string) => ReturnType<NonNullable<Window['coreDesk']>['whatsapp']['selectIcon']>
 }
 
-function reconcileTabs(snapshot: WhatsAppProfilesSnapshot) {
+export function reconcileWhatsAppTabs(snapshot: WhatsAppProfilesSnapshot, selectActiveProfile = true) {
   const tabs = useTabsStore.getState()
   const profileById = new Map(snapshot.profiles.map((profile) => [profile.id, profile]))
   for (const tab of tabs.tabs) {
@@ -45,10 +45,10 @@ function reconcileTabs(snapshot: WhatsAppProfilesSnapshot) {
     if (profile.open && profile.enabled) tabs.addWhatsAppTab(profile, false)
   })
   const active = snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId && profile.open)
-  if (active) tabs.selectTab(`whatsapp:${active.id}`)
+  if (selectActiveProfile && active) tabs.selectTab(`whatsapp:${active.id}`)
 }
 
-export const useWhatsAppStore = create<WhatsAppState>((set, get) => ({
+export const useWhatsAppStore = create<WhatsAppState>((set) => ({
   profiles: [],
   runtime: {},
   loading: true,
@@ -58,7 +58,7 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => ({
   setProfileSwitcherOpen: (profileSwitcherOpen) => set({ profileSwitcherOpen }),
   setSnapshot: (snapshot) => {
     set({ profiles: snapshot.profiles, activeProfileId: snapshot.activeProfileId, loading: false })
-    reconcileTabs(snapshot)
+    reconcileWhatsAppTabs(snapshot)
   },
   setRuntime: (runtime) => {
     set((state) => ({ runtime: { ...state.runtime, [runtime.profileId]: runtime } }))
@@ -67,7 +67,9 @@ export const useWhatsAppStore = create<WhatsAppState>((set, get) => ({
   hydrate: async () => {
     const api = window.coreDesk?.whatsapp
     if (!api) { set({ loading: false }); return }
-    get().setSnapshot(await api.listProfiles())
+    const snapshot = await api.listProfiles()
+    set({ profiles: snapshot.profiles, activeProfileId: snapshot.activeProfileId, loading: false })
+    reconcileWhatsAppTabs(snapshot, false)
   },
   createProfile: async (input) => {
     const profile = await window.coreDesk!.whatsapp.createProfile(input)

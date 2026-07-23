@@ -5,7 +5,7 @@ import { FOCUS_ADDRESS_EVENT } from '../hooks/useTabShortcuts'
 import { useTabsStore } from '../store/useTabsStore'
 import { toNavigableUrl } from '../utils/navigation'
 
-const controlClass = 'grid h-7 w-7 shrink-0 place-items-center rounded text-slate-400 transition-colors hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-30'
+const controlClass = 'toolbar-icon-button grid h-7 w-7 shrink-0 place-items-center rounded text-slate-400 hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-30'
 
 export function NavigationBar() {
   const tabs = useTabsStore((state) => state.tabs)
@@ -37,7 +37,7 @@ export function NavigationBar() {
 
   return (
     <div
-      className="relative flex shrink-0 items-center gap-1 border-b border-core-line bg-core-panel px-2"
+      className="core-toolbar relative flex shrink-0 items-center gap-1 border-b border-core-line bg-core-panel px-2"
       style={{ height: SHELL_LAYOUT.navigationBarHeight }}
     >
       <button className={controlClass} disabled={!tab.canGoBack} onClick={() => views?.back(tab.id)} aria-label="Voltar"><ArrowLeft size={15} /></button>

@@ -330,7 +330,12 @@ function registerViewControls() {
       appServices?.workspace.setActive(activeTabId)
     }
   })
-  ipcMain.on(VIEW_CHANNELS.setEmbedded, (event, id: string, bounds: { x: number; y: number; width: number; height: number } | null) => {
+  ipcMain.on(VIEW_CHANNELS.setEmbedded, (
+    event,
+    id: string,
+    bounds: { x: number; y: number; width: number; height: number } | null,
+    options?: { visible?: unknown },
+  ) => {
     if (!isTrustedRenderer(event.sender) || !['app-maps', 'budget-google-maps', CORECHAT_VIEW_ID].includes(id)) return
     if (bounds && (!Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || bounds.x < 0 || bounds.y < 0 || bounds.width <= 0 || bounds.height <= 0 || bounds.width > 10000 || bounds.height > 10000)) return
     if (id === 'budget-google-maps') {
@@ -339,7 +344,8 @@ function registerViewControls() {
     if (id === CORECHAT_VIEW_ID && bounds) {
       viewManager?.ensureView({ id, title: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, pinned: true, type: 'web' })
     }
-    viewManager?.setEmbedded(id, bounds)
+    const visible = options?.visible === undefined ? true : options.visible === true
+    viewManager?.setEmbedded(id, bounds, visible)
   })
 
   const actions = [

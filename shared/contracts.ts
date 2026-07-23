@@ -111,7 +111,11 @@ export interface CoreDeskApi {
   }
   views: {
     sync: (tabs: WebTabDescriptor[], activeTabId: string) => void
-    setEmbedded: (id: string, bounds: { x: number; y: number; width: number; height: number } | null) => void
+    setEmbedded: (
+      id: string,
+      bounds: { x: number; y: number; width: number; height: number } | null,
+      options?: { visible?: boolean },
+    ) => void
     navigate: (id: string, url: string) => void
     back: (id: string) => void
     forward: (id: string) => void

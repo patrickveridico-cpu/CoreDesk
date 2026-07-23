@@ -11,6 +11,7 @@ export function useCoreChatPanelView(
   const [viewState, setViewState] = useState<WebViewStateUpdate>({ id: CORECHAT_VIEW_ID })
   const [zoomFactor, setZoomFactor] = useState<number | null>(null)
   const lastBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null)
+  const lastVisibilityRef = useRef<boolean | null>(null)
   const frameRef = useRef(0)
   const themeMode = useAppearanceStore((state) => state.themeMode)
   const accentColor = useAppearanceStore((state) => state.accentColor)
@@ -33,9 +34,11 @@ export function useCoreChatPanelView(
 
   useEffect(() => {
     const element = containerRef.current
-    const visible = phase === 'opening' || phase === 'open'
-    if (!element || !visible || zoomFactor === null || viewState.error) {
+    const shouldMeasure = phase === 'opening' || phase === 'open'
+    const shouldRevealView = phase === 'open'
+    if (!element || !shouldMeasure || zoomFactor === null || viewState.error) {
       lastBoundsRef.current = null
+      lastVisibilityRef.current = null
       window.coreDesk?.views.setEmbedded(CORECHAT_VIEW_ID, null)
       return
     }
@@ -46,13 +49,22 @@ export function useCoreChatPanelView(
       const bounds = toEmbeddedBounds(rect, zoomFactor)
       if (bounds.width <= 0 || bounds.height <= 0) {
         lastBoundsRef.current = null
+        lastVisibilityRef.current = null
         window.coreDesk?.views.setEmbedded(CORECHAT_VIEW_ID, null)
         return
       }
       const previous = lastBoundsRef.current
-      if (previous && previous.x === bounds.x && previous.y === bounds.y && previous.width === bounds.width && previous.height === bounds.height) return
+      if (
+        previous
+        && previous.x === bounds.x
+        && previous.y === bounds.y
+        && previous.width === bounds.width
+        && previous.height === bounds.height
+        && lastVisibilityRef.current === shouldRevealView
+      ) return
       lastBoundsRef.current = bounds
-      window.coreDesk?.views.setEmbedded(CORECHAT_VIEW_ID, bounds)
+      lastVisibilityRef.current = shouldRevealView
+      window.coreDesk?.views.setEmbedded(CORECHAT_VIEW_ID, bounds, { visible: shouldRevealView })
     }
     const scheduleMeasure = () => {
       window.cancelAnimationFrame(frameRef.current)
@@ -69,6 +81,7 @@ export function useCoreChatPanelView(
       window.removeEventListener('resize', scheduleMeasure)
       window.cancelAnimationFrame(frameRef.current)
       lastBoundsRef.current = null
+      lastVisibilityRef.current = null
       window.coreDesk?.views.setEmbedded(CORECHAT_VIEW_ID, null)
     }
   }, [accentColor, containerRef, phase, themeMode, viewState.error, zoomFactor])

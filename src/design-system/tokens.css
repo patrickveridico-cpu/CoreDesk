@@ -22,9 +22,14 @@
   --core-focus-ring: 125 211 252;
 
   --core-shadow-color: 0 0 0;
+  --core-shadow-xs: 0 1px 2px rgb(var(--core-shadow-color) / 0.14);
+  --core-shadow-sm: 0 4px 12px rgb(var(--core-shadow-color) / 0.18);
+  --core-shadow-md: 0 12px 32px rgb(var(--core-shadow-color) / 0.24);
   --core-shadow-low: 0 1px 2px rgb(var(--core-shadow-color) / 0.18);
   --core-shadow-medium: 0 8px 24px rgb(var(--core-shadow-color) / 0.22);
   --core-shadow-high: 0 18px 48px rgb(var(--core-shadow-color) / 0.30);
+  --core-glow-accent-soft: 0 0 0 1px rgb(var(--core-accent) / 0.16), 0 6px 18px rgb(var(--core-accent) / 0.08);
+  --core-glow-accent-medium: 0 0 0 1px rgb(var(--core-accent) / 0.28), 0 8px 24px rgb(var(--core-accent) / 0.14);
 
   --core-radius-xs: 0.25rem;
   --core-radius-sm: 0.375rem;
@@ -44,8 +49,10 @@
   --core-motion-fast: 100ms;
   --core-motion-normal: 160ms;
   --core-motion-slow: 240ms;
+  --core-transition-fast: 140ms;
+  --core-transition-normal: 180ms;
   --core-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --core-easing-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+  --core-easing-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 
   --core-elevation-base: 0;
   --core-elevation-header: 100;

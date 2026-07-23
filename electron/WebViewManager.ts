@@ -17,6 +17,7 @@ import {
   CORECHAT_VIEW_ID,
   classifyCoreChatNavigation,
   createCoreChatCompactScript,
+  createCoreChatFocusScript,
   type CoreChatCompactResult,
 } from '../shared/corechat'
 
@@ -34,6 +35,11 @@ interface ManagedView {
   budgetRouteInstallToken?: number
   coreChatCompactRetryTimer?: NodeJS.Timeout
   coreChatCompactRetryCount?: number
+  coreChatFocusRetryTimer?: NodeJS.Timeout
+  coreChatFocusRetryCount?: number
+  coreChatFocusToken?: number
+  coreChatPromptFocused?: boolean
+  coreChatFocusInFlight?: boolean
 }
 
 function isAllowedUrl(value: string) {
@@ -123,18 +129,18 @@ export class WebViewManager {
     this.showActive()
   }
 
-  setEmbedded(id: string, bounds: { x: number; y: number; width: number; height: number } | null) {
+  setEmbedded(
+    id: string,
+    bounds: { x: number; y: number; width: number; height: number } | null,
+    visible = true,
+  ) {
     const entry = this.views.get(id)
     if (!entry) return
     if (!bounds) {
       if (this.embedded.delete(id) && !this.window.isDestroyed()) this.window.contentView.removeChildView(entry.view)
+      if (id === CORECHAT_VIEW_ID) this.resetCoreChatFocus(entry)
       this.showActive()
       return
-    }
-    if (this.attachedId && this.attachedId !== id) {
-      const attached = this.views.get(this.attachedId)
-      if (attached && !this.window.isDestroyed()) this.window.contentView.removeChildView(attached.view)
-      this.attachedId = null
     }
     const [contentWidth, contentHeight] = this.window.getContentSize()
     const clampedBounds = {
@@ -146,11 +152,28 @@ export class WebViewManager {
     clampedBounds.width = Math.max(0, Math.min(Math.floor(bounds.width), contentWidth - clampedBounds.x))
     clampedBounds.height = Math.max(0, Math.min(Math.floor(bounds.height), contentHeight - clampedBounds.y))
     if (clampedBounds.width === 0 || clampedBounds.height === 0) return
-    const wasEmbedded = this.embedded.has(id)
-    this.embedded.add(id)
     entry.view.webContents.setZoomFactor(this.zoomFactor)
     entry.view.setBounds(clampedBounds)
+    if (!visible) {
+      if (this.embedded.delete(id) && !this.window.isDestroyed()) this.window.contentView.removeChildView(entry.view)
+      if (id === CORECHAT_VIEW_ID) this.resetCoreChatFocus(entry)
+      this.showActive()
+      return
+    }
+    if (this.attachedId && this.attachedId !== id) {
+      const attached = this.views.get(this.attachedId)
+      if (attached && !this.window.isDestroyed()) this.window.contentView.removeChildView(attached.view)
+      this.attachedId = null
+    }
+    const wasEmbedded = this.embedded.has(id)
+    this.embedded.add(id)
     if (!this.window.isDestroyed() && !wasEmbedded) this.window.contentView.addChildView(entry.view)
+    if (id === CORECHAT_VIEW_ID && !wasEmbedded) {
+      entry.coreChatFocusToken = (entry.coreChatFocusToken ?? 0) + 1
+      entry.coreChatFocusRetryCount = 0
+      entry.coreChatPromptFocused = false
+      void this.focusCoreChatPrompt(entry, entry.coreChatFocusToken)
+    }
   }
 
   setZoomFactor(factor: number) {
@@ -379,6 +402,11 @@ export class WebViewManager {
         if (entry.coreChatCompactRetryTimer) clearTimeout(entry.coreChatCompactRetryTimer)
         entry.coreChatCompactRetryCount = 0
         void this.applyCoreChatCompactMode(entry)
+        if (this.embedded.has(id) && !entry.coreChatPromptFocused) {
+          if (entry.coreChatFocusRetryTimer) clearTimeout(entry.coreChatFocusRetryTimer)
+          entry.coreChatFocusRetryTimer = undefined
+          void this.focusCoreChatPrompt(entry, entry.coreChatFocusToken ?? 0)
+        }
       }
     }
     const onNavigate = (_event: Event, url: string) => {
@@ -626,6 +654,61 @@ export class WebViewManager {
     }
   }
 
+  private resetCoreChatFocus(entry: ManagedView) {
+    if (entry.coreChatFocusRetryTimer) clearTimeout(entry.coreChatFocusRetryTimer)
+    entry.coreChatFocusRetryTimer = undefined
+    entry.coreChatFocusRetryCount = 0
+    entry.coreChatFocusToken = (entry.coreChatFocusToken ?? 0) + 1
+    entry.coreChatPromptFocused = false
+    entry.coreChatFocusInFlight = false
+  }
+
+  private scheduleCoreChatFocusRetry(entry: ManagedView, token: number) {
+    if (entry.coreChatFocusRetryTimer || (entry.coreChatFocusRetryCount ?? 0) >= 8) return
+    entry.coreChatFocusRetryCount = (entry.coreChatFocusRetryCount ?? 0) + 1
+    entry.coreChatFocusRetryTimer = setTimeout(() => {
+      entry.coreChatFocusRetryTimer = undefined
+      void this.focusCoreChatPrompt(entry, token)
+    }, 250)
+  }
+
+  private async focusCoreChatPrompt(entry: ManagedView, token: number) {
+    if (
+      entry.descriptor.id !== CORECHAT_VIEW_ID
+      || entry.view.webContents.isDestroyed()
+      || !this.embedded.has(CORECHAT_VIEW_ID)
+      || entry.coreChatFocusToken !== token
+      || entry.coreChatPromptFocused
+      || entry.coreChatFocusInFlight
+    ) return
+    if (entry.loading || entry.view.webContents.isLoading()) {
+      this.scheduleCoreChatFocusRetry(entry, token)
+      return
+    }
+    entry.coreChatFocusInFlight = true
+    try {
+      const result = await entry.view.webContents.executeJavaScript(createCoreChatFocusScript()) as {
+        focused?: boolean
+        reason?: string
+      }
+      if (entry.coreChatFocusToken !== token || !this.embedded.has(CORECHAT_VIEW_ID)) return
+      if (result.focused) {
+        entry.coreChatPromptFocused = true
+        this.devLog('corechat-prompt-focused', { target: CORECHAT_VIEW_ID })
+        return
+      }
+      this.scheduleCoreChatFocusRetry(entry, token)
+    } catch (error) {
+      this.devLog('corechat-prompt-focus-failed', {
+        target: CORECHAT_VIEW_ID,
+        error: error instanceof Error ? error.name : 'UnknownError',
+      })
+      this.scheduleCoreChatFocusRetry(entry, token)
+    } finally {
+      entry.coreChatFocusInFlight = false
+    }
+  }
+
   private installBudgetMapsObserver(entry: ManagedView) {
     if (entry.descriptor.id !== 'budget-google-maps' || entry.view.webContents.isDestroyed()) return
     if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
@@ -734,6 +817,8 @@ export class WebViewManager {
     entry.cleanup.forEach((cleanup) => cleanup())
     this.permissions?.unregisterDownloadSource?.(entry.view.webContents)
     if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
+    if (entry.coreChatCompactRetryTimer) clearTimeout(entry.coreChatCompactRetryTimer)
+    if (entry.coreChatFocusRetryTimer) clearTimeout(entry.coreChatFocusRetryTimer)
     this.embedded.delete(id)
     if (!entry.view.webContents.isDestroyed()) {
       entry.view.webContents.close({ waitForBeforeUnload: false })

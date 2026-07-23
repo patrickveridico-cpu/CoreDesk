@@ -18,9 +18,24 @@
   font-weight: 600;
   justify-content: center;
   transition:
-    background-color var(--core-motion-normal) var(--core-easing-standard),
-    border-color var(--core-motion-normal) var(--core-easing-standard),
-    color var(--core-motion-normal) var(--core-easing-standard);
+    background-color var(--core-transition-normal) var(--core-easing-standard),
+    border-color var(--core-transition-normal) var(--core-easing-standard),
+    box-shadow var(--core-transition-normal) var(--core-easing-standard),
+    color var(--core-transition-normal) var(--core-easing-standard),
+    opacity var(--core-transition-fast) var(--core-easing-standard),
+    transform var(--core-transition-fast) var(--core-easing-emphasized);
+}
+
+.ds-button:hover:not(:disabled),
+.ds-icon-button:hover:not(:disabled) {
+  box-shadow: var(--core-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.ds-button:active:not(:disabled),
+.ds-icon-button:active:not(:disabled) {
+  box-shadow: var(--core-shadow-xs);
+  transform: translateY(0) scale(0.99);
 }
 
 .ds-button {
@@ -42,6 +57,7 @@
 
 .ds-button[data-variant="primary"]:hover:not(:disabled) {
   background: rgb(var(--core-accent-hover));
+  box-shadow: var(--core-glow-accent-soft);
 }
 
 .ds-button[data-variant="primary"]:active:not(:disabled) {
@@ -82,11 +98,16 @@
   background: rgb(var(--core-surface));
   border: 1px solid rgb(var(--core-border));
   border-radius: var(--core-radius-lg);
+  box-shadow: var(--core-shadow-xs);
+  transition:
+    background-color var(--core-transition-normal) var(--core-easing-standard),
+    border-color var(--core-transition-normal) var(--core-easing-standard),
+    box-shadow var(--core-transition-normal) var(--core-easing-standard);
 }
 
 .ds-surface[data-elevation="raised"] {
   background: rgb(var(--core-surface-elevated));
-  box-shadow: var(--core-shadow-medium);
+  box-shadow: var(--core-shadow-md);
 }
 
 .ds-badge {
