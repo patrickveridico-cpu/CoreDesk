@@ -4,6 +4,7 @@ import { SHELL_LAYOUT } from '../../shared/layout'
 import { FOCUS_ADDRESS_EVENT } from '../hooks/useTabShortcuts'
 import { useTabsStore } from '../store/useTabsStore'
 import { toNavigableUrl } from '../utils/navigation'
+import { CORECHAT_VIEW_ID } from '../../shared/corechat'
 
 const controlClass = 'grid h-7 w-7 shrink-0 place-items-center rounded text-slate-400 transition-colors hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-30'
 
@@ -26,7 +27,7 @@ export function NavigationBar() {
     return () => window.removeEventListener(FOCUS_ADDRESS_EVENT, focusAddress)
   }, [])
 
-  if (tab?.type !== 'web') return null
+  if (tab?.type !== 'web' || tab.id === CORECHAT_VIEW_ID) return null
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()

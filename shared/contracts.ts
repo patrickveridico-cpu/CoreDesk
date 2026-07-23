@@ -9,6 +9,7 @@ import type {
 } from './whatsapp'
 import type { CoreCommandInfo, CoreConfig } from './core/contracts'
 import type { OperationsApi } from './operations/contracts'
+import type { CoreChatCompactResult } from './corechat'
 
 export type TabType = 'internal' | 'web' | 'whatsapp'
 
@@ -36,6 +37,7 @@ export interface WorkspaceTab {
   accentColor?: string
   unreadCount?: number
   connectionState?: WhatsAppConnectionState
+  coreChatCompact?: CoreChatCompactResult
 }
 
 export interface WebTabDescriptor {
@@ -58,6 +60,7 @@ export interface WebViewStateUpdate {
   canGoBack?: boolean
   canGoForward?: boolean
   error?: WebLoadError | null
+  coreChatCompact?: CoreChatCompactResult
 }
 
 export interface BudgetMapsRoutePayload {
@@ -117,6 +120,10 @@ export interface CoreDeskApi {
     onStateChange: (callback: (update: WebViewStateUpdate) => void) => () => void
     onNewTabRequest: (callback: (request: NewTabRequest) => void) => () => void
     onShortcut: (callback: (command: ShortcutCommand) => void) => () => void
+  }
+  coreChat: {
+    getCompact: () => Promise<boolean>
+    setCompact: (enabled: boolean) => Promise<CoreChatCompactResult>
   }
   budgetMaps: {
     onRouteUpdated: (callback: (payload: BudgetMapsRoutePayload) => void) => () => void

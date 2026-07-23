@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { NewTabRequest, WebViewStateUpdate, WorkspaceTab } from '../../shared/contracts'
 import type { WhatsAppProfile, WhatsAppProfileState } from '../../shared/whatsapp'
 import { WHATSAPP_URL } from '../../shared/whatsapp'
+import { CORECHAT_PARTITION, CORECHAT_URL, CORECHAT_VIEW_ID } from '../../shared/corechat'
 
 const cleanWebState = {
   loading: false,
@@ -42,7 +43,7 @@ interface TabsState {
   selectByIndex: (index: number) => void
   selectRelative: (offset: number) => void
   applyWebViewState: (update: WebViewStateUpdate) => void
-  openWorkspaceWebTab: (id: 'app-google' | 'app-maps') => void
+  openWorkspaceWebTab: (id: 'app-google' | 'app-maps' | typeof CORECHAT_VIEW_ID) => void
   toggleWebTabPinned: (id: 'app-google' | 'app-maps') => void
   previousTabIds: Record<string, string>
 }
@@ -197,7 +198,9 @@ export const useTabsStore = create<TabsState>()(
         if (state.tabs.some((tab) => tab.id === id)) return { activeTabId: id, previousTabIds: { ...state.previousTabIds, [id]: state.activeTabId } }
         const tab: WorkspaceTab = id === 'app-google'
           ? { id, type: 'web', title: 'Google', url: 'https://www.google.com', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
-          : { id, type: 'web', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
+          : id === 'app-maps'
+            ? { id, type: 'web', title: 'Maps', url: 'https://www.google.com/maps', partition: 'persist:coredesk-google', closable: true, pinned: false, ...cleanWebState }
+            : { id: CORECHAT_VIEW_ID, type: 'web', title: 'CoreChat', fixedTitle: 'CoreChat', url: CORECHAT_URL, partition: CORECHAT_PARTITION, closable: false, pinned: true, ...cleanWebState }
         return tab ? { tabs: [...state.tabs, tab], activeTabId: id, previousTabIds: { ...state.previousTabIds, [id]: state.activeTabId } } : state
       }),
       toggleWebTabPinned: (id) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id ? { ...tab, pinned: !tab.pinned } : tab) })),

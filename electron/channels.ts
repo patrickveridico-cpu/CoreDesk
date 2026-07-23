@@ -24,6 +24,11 @@ export const BUDGET_MAPS_CHANNELS = {
   routeUpdated: 'budget-maps:route-updated',
 } as const
 
+export const CORECHAT_CHANNELS = {
+  getCompact: 'corechat:get-compact',
+  setCompact: 'corechat:set-compact',
+} as const
+
 export const ZOOM_CHANNELS = {
   get: 'zoom:get',
   set: 'zoom:set',

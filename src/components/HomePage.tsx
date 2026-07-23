@@ -1,9 +1,9 @@
-import { Activity, FilePlus2, MapPinned, MessageCircle, Route, Send, Sparkles } from 'lucide-react'
+import { Activity, FilePlus2, MapPinned, MessageCircle, Route, Sparkles } from 'lucide-react'
 import { getGreeting } from '../../shared/core/home'
 import coreDeskLogo from '../assets/coredesk-logo.png'
-import { Badge, Button, Divider, IconButton, Surface } from '../design-system'
+import { Button, Divider, Surface } from '../design-system'
 import { useAppearanceStore, type ThemeMode } from '../store/useAppearanceStore'
-import { runHomeQuickAction, type HomeQuickAction } from '../utils/homeNavigation'
+import { openCoreChatFromHome, runHomeQuickAction, type HomeQuickAction } from '../utils/homeNavigation'
 
 const quickActions = [
   { id: 'new-budget', label: 'Novo orçamento', description: 'Iniciar um atendimento', icon: FilePlus2 },
@@ -71,20 +71,15 @@ export function HomePage({ now }: { now?: Date }) {
         </section>
 
         <div className="mt-5 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(14rem,1fr)]">
-          <Surface role="region" aria-labelledby="corechat-title" aria-describedby="corechat-unavailable" className="home-corechat min-w-0 p-4">
+          <Surface role="region" aria-labelledby="corechat-title" className="home-corechat min-w-0 p-4">
             <div className="flex items-start gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-core-accent/10 text-core-accent"><Sparkles aria-hidden="true" size={17} /></span>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2"><h2 id="corechat-title" className="text-sm font-semibold text-core-text">CoreChat</h2><Badge>Em breve</Badge></div>
-                <p className="mt-1 text-xs text-core-muted">Assistente inteligente do CoreDesk</p>
+                <h2 id="corechat-title" className="text-sm font-semibold text-core-text">CoreChat</h2>
+                <p className="mt-1 text-xs text-core-muted">Pesquisas rápidas com ChatGPT</p>
               </div>
             </div>
-            <div className="mt-3 flex min-w-0 items-center gap-2">
-              <label htmlFor="corechat-preview" className="sr-only">CoreChat indisponível</label>
-              <input id="corechat-preview" disabled aria-describedby="corechat-unavailable" placeholder="Pergunte qualquer coisa ao CoreChat..." className="home-corechat-input min-w-0 flex-1" />
-              <IconButton disabled label="Enviar mensagem — CoreChat em breve"><Send aria-hidden="true" size={15} /></IconButton>
-            </div>
-            <p id="corechat-unavailable" className="sr-only">O CoreChat ainda não está disponível.</p>
+            <Button variant="primary" onClick={() => openCoreChatFromHome()} className="mt-3">Abrir CoreChat</Button>
           </Surface>
           <SystemStatus />
         </div>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { NavigationBar } from './components/NavigationBar'
+import { CoreChatBar } from './components/CoreChatBar'
 import { ProfileSwitcher } from './components/communication/ProfileSwitcher'
 import { GlobalTopBar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
@@ -80,6 +81,7 @@ export default function App() {
       <TitleBar />
       <GlobalTopBar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <CoreChatBar />
         <NavigationBar />
         <WorkspaceContent />
       </div>

@@ -35,6 +35,7 @@ const VIEW_CHANNELS = {
   shortcut: 'views:shortcut',
 } as const
 const BUDGET_MAPS_CHANNELS = { routeUpdated: 'budget-maps:route-updated' } as const
+const CORECHAT_CHANNELS = { getCompact: 'corechat:get-compact', setCompact: 'corechat:set-compact' } as const
 const ZOOM_CHANNELS = { get: 'zoom:get', set: 'zoom:set', changed: 'zoom:changed' } as const
 
 const WHATSAPP_CHANNELS = {
@@ -101,6 +102,10 @@ const api = {
       ipcRenderer.on(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
       return () => ipcRenderer.removeListener(BUDGET_MAPS_CHANNELS.routeUpdated, listener)
     },
+  },
+  coreChat: {
+    getCompact: () => ipcRenderer.invoke(CORECHAT_CHANNELS.getCompact) as Promise<boolean>,
+    setCompact: (enabled: boolean) => ipcRenderer.invoke(CORECHAT_CHANNELS.setCompact, enabled),
   },
   zoom: {
     get: () => ipcRenderer.invoke(ZOOM_CHANNELS.get) as Promise<number>,

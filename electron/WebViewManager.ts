@@ -1,5 +1,5 @@
 import { app, BrowserWindow, session, WebContentsView } from 'electron'
-import type { Event, Input, Session } from 'electron'
+import type { BrowserWindowConstructorOptions, Event, Input, Session } from 'electron'
 import type {
   NewTabRequest,
   ShortcutCommand,
@@ -12,6 +12,13 @@ import type { PermissionService } from './core/permissions/PermissionService'
 import { createBudgetMapsDistanceExtractorScript } from '../shared/maps/distanceExtraction'
 import { classifyWhatsAppExternalLink } from './whatsapp/external-link-policy'
 import type { ExternalLinkSource } from './whatsapp/WhatsAppExternalLinkManager'
+import {
+  CORECHAT_PARTITION,
+  CORECHAT_VIEW_ID,
+  classifyCoreChatNavigation,
+  createCoreChatCompactScript,
+  type CoreChatCompactResult,
+} from '../shared/corechat'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
@@ -25,6 +32,8 @@ interface ManagedView {
   loadTimer?: NodeJS.Timeout
   budgetRouteTimer?: NodeJS.Timeout
   budgetRouteInstallToken?: number
+  coreChatCompactRetryTimer?: NodeJS.Timeout
+  coreChatCompactRetryCount?: number
 }
 
 function isAllowedUrl(value: string) {
@@ -35,6 +44,29 @@ function isAllowedUrl(value: string) {
   }
 }
 
+function coreChatPopupOptions(parent: BrowserWindow): BrowserWindowConstructorOptions {
+  return {
+    parent,
+    modal: false,
+    show: true,
+    frame: true,
+    resizable: true,
+    width: 720,
+    height: 760,
+    minWidth: 560,
+    minHeight: 520,
+    backgroundColor: '#0b0e12',
+    webPreferences: {
+      partition: CORECHAT_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+    },
+  }
+}
+
 export class WebViewManager {
   private readonly views = new Map<string, ManagedView>()
   private readonly configuredPartitions = new Set<string>()
@@ -42,6 +74,7 @@ export class WebViewManager {
   private attachedId: string | null = null
   private readonly embedded = new Set<string>()
   private zoomFactor: number
+  private coreChatCompactEnabled = true
 
   constructor(
     private readonly window: BrowserWindow,
@@ -137,6 +170,10 @@ export class WebViewManager {
   navigate(id: string, url: string) {
     const entry = this.views.get(id)
     if (!entry || !this.isAllowedUrl(url)) return
+    if (id === CORECHAT_VIEW_ID) {
+      const decision = classifyCoreChatNavigation(url)
+      if (decision.action !== 'allow-internal' && decision.action !== 'allow-auth') return
+    }
     entry.failed = false
     this.emitState({ id, error: null })
     if (id === this.activeId) this.showActive()
@@ -180,6 +217,21 @@ export class WebViewManager {
     const entry = this.views.get(id)
     if (!entry) return
     this.navigate(id, entry.view.webContents.getURL() || entry.descriptor.url)
+  }
+
+  getCoreChatCompact() {
+    return this.coreChatCompactEnabled
+  }
+
+  async setCoreChatCompact(enabled: boolean): Promise<CoreChatCompactResult> {
+    this.coreChatCompactEnabled = enabled
+    const entry = this.views.get(CORECHAT_VIEW_ID)
+    if (!entry || entry.view.webContents.isDestroyed()) {
+      return { enabled, applied: false, reason: 'view-not-ready', hiddenElements: 0 }
+    }
+    if (entry.coreChatCompactRetryTimer) clearTimeout(entry.coreChatCompactRetryTimer)
+    entry.coreChatCompactRetryCount = 0
+    return this.applyCoreChatCompactMode(entry)
   }
 
   suspend(id: string) {
@@ -316,6 +368,11 @@ export class WebViewManager {
       if (entry.loadTimer) clearTimeout(entry.loadTimer)
       this.emitState({ id, loading: false, error: null })
       if (id === 'budget-google-maps') this.installBudgetMapsObserver(entry)
+      if (id === CORECHAT_VIEW_ID) {
+        if (entry.coreChatCompactRetryTimer) clearTimeout(entry.coreChatCompactRetryTimer)
+        entry.coreChatCompactRetryCount = 0
+        void this.applyCoreChatCompactMode(entry)
+      }
     }
     const onNavigate = (_event: Event, url: string) => {
       entry.descriptor = { ...entry.descriptor, url }
@@ -346,7 +403,7 @@ export class WebViewManager {
       })
       if (id === this.activeId) this.showActive()
     }
-    const handleWhatsAppNavigation = (eventName: 'will-navigate' | 'will-redirect', event: Event, legacyUrl: string, legacyIsMainFrame?: boolean) => {
+    const handleManagedNavigation = (eventName: 'will-navigate' | 'will-redirect', event: Event, legacyUrl: string, legacyIsMainFrame?: boolean) => {
       const details = event as Event & { url?: string; isMainFrame?: boolean }
       const url = details.url ?? legacyUrl
       const isMainFrame = details.isMainFrame ?? legacyIsMainFrame ?? true
@@ -388,10 +445,24 @@ export class WebViewManager {
         this.onWhatsAppExternalLink?.(url, { target: id, profileId: entry.descriptor.profileId })
         return
       }
+      if (id === CORECHAT_VIEW_ID) {
+        if (!isMainFrame) return
+        const coreChatDecision = classifyCoreChatNavigation(url)
+        if (coreChatDecision.action === 'allow-internal' || coreChatDecision.action === 'allow-auth') return
+        event.preventDefault()
+        this.devLog('corechat-navigation-blocked', {
+          target: id,
+          event: eventName,
+          protocol: coreChatDecision.protocol,
+          hostname: coreChatDecision.hostname,
+          reason: coreChatDecision.action === 'block' ? coreChatDecision.reason : 'external-main-frame-navigation',
+        })
+        return
+      }
       if (!this.isAllowedUrl(url)) event.preventDefault()
     }
-    const onWillNavigate = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleWhatsAppNavigation('will-navigate', event, url, isMainFrame)
-    const onWillRedirect = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleWhatsAppNavigation('will-redirect', event, url, isMainFrame)
+    const onWillNavigate = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleManagedNavigation('will-navigate', event, url, isMainFrame)
+    const onWillRedirect = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleManagedNavigation('will-redirect', event, url, isMainFrame)
     const onBeforeInput = (event: Event, input: Input) => {
       const zoomAction = this.toZoomShortcut(input)
       if (zoomAction) {
@@ -404,6 +475,32 @@ export class WebViewManager {
       event.preventDefault()
       if (command.type === 'focus-address') this.window.webContents.focus()
       this.send(VIEW_CHANNELS.shortcut, command)
+    }
+    const onDidCreateWindow = (child: BrowserWindow) => {
+      if (id !== CORECHAT_VIEW_ID) return
+      const guardPopupNavigation = (event: Event, url: string) => {
+        const decision = classifyCoreChatNavigation(url)
+        if (decision.action === 'allow-internal' || decision.action === 'allow-auth') return
+        event.preventDefault()
+        this.devLog('corechat-auth-popup-navigation-blocked', {
+          target: id,
+          protocol: decision.protocol,
+          hostname: decision.hostname,
+          reason: decision.action === 'block' ? decision.reason : 'external-navigation',
+        })
+      }
+      child.webContents.on('will-navigate', guardPopupNavigation)
+      child.webContents.on('will-redirect', guardPopupNavigation)
+      child.webContents.setWindowOpenHandler(({ url }) => {
+        const decision = classifyCoreChatNavigation(url)
+        if (decision.action === 'allow-internal' || decision.action === 'allow-auth') {
+          return { action: 'allow', overrideBrowserWindowOptions: coreChatPopupOptions(this.window) }
+        }
+        if (decision.action === 'open-external') {
+          this.onWhatsAppExternalLink?.(url, { target: CORECHAT_VIEW_ID })
+        }
+        return { action: 'deny' }
+      })
     }
 
     webContents.on('did-start-loading', onStart)
@@ -425,6 +522,7 @@ export class WebViewManager {
     webContents.on('will-navigate', onWillNavigate)
     webContents.on('will-redirect', onWillRedirect)
     webContents.on('before-input-event', onBeforeInput)
+    webContents.on('did-create-window', onDidCreateWindow)
     webContents.setWindowOpenHandler(({ url }) => {
       if (entry.descriptor.type === 'whatsapp') {
         const decision = classifyWhatsAppExternalLink(url)
@@ -432,6 +530,26 @@ export class WebViewManager {
           if (decision.protocol === 'http:' || decision.protocol === 'https:') void webContents.loadURL(url)
         } else {
           this.onWhatsAppExternalLink?.(url, { target: id, profileId: entry.descriptor.profileId })
+        }
+        return { action: 'deny' }
+      }
+      if (id === CORECHAT_VIEW_ID) {
+        const decision = classifyCoreChatNavigation(url)
+        if (decision.action === 'allow-internal' || decision.action === 'allow-auth') {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: coreChatPopupOptions(this.window),
+          }
+        }
+        if (decision.action === 'open-external') {
+          this.onWhatsAppExternalLink?.(url, { target: CORECHAT_VIEW_ID })
+        } else {
+          this.devLog('corechat-popup-blocked', {
+            target: id,
+            protocol: decision.protocol,
+            hostname: decision.hostname,
+            reason: decision.action === 'block' ? decision.reason : 'popup-not-allowed',
+          })
         }
         return { action: 'deny' }
       }
@@ -455,12 +573,56 @@ export class WebViewManager {
       () => webContents.off('will-navigate', onWillNavigate),
       () => webContents.off('will-redirect', onWillRedirect),
       () => webContents.off('before-input-event', onBeforeInput),
+      () => webContents.off('did-create-window', onDidCreateWindow),
     )
+  }
+
+  private async applyCoreChatCompactMode(entry: ManagedView): Promise<CoreChatCompactResult> {
+    if (entry.descriptor.id !== CORECHAT_VIEW_ID || entry.view.webContents.isDestroyed()) {
+      return { enabled: this.coreChatCompactEnabled, applied: false, reason: 'view-not-ready', hiddenElements: 0 }
+    }
+    try {
+      const result = await entry.view.webContents.executeJavaScript(
+        createCoreChatCompactScript(this.coreChatCompactEnabled),
+      ) as CoreChatCompactResult
+      const retryable = result.reason === 'composer-not-found' || result.reason === 'secondary-navigation-not-found'
+      const retryCount = entry.coreChatCompactRetryCount ?? 0
+      if (this.coreChatCompactEnabled && !result.applied && retryable && retryCount < 2) {
+        entry.coreChatCompactRetryCount = retryCount + 1
+        entry.coreChatCompactRetryTimer = setTimeout(() => {
+          entry.coreChatCompactRetryTimer = undefined
+          void this.applyCoreChatCompactMode(entry)
+        }, 700)
+      } else if (this.coreChatCompactEnabled && !result.applied) {
+        console.warn('[CoreChat] compact-mode-fallback', { reason: result.reason })
+      }
+      this.emitState({ id: CORECHAT_VIEW_ID, coreChatCompact: result })
+      return result
+    } catch (error) {
+      const result: CoreChatCompactResult = {
+        enabled: this.coreChatCompactEnabled,
+        applied: false,
+        reason: 'script-execution-failed',
+        hiddenElements: 0,
+      }
+      console.warn('[CoreChat] compact-mode-fallback', {
+        reason: result.reason,
+        error: error instanceof Error ? error.name : 'UnknownError',
+      })
+      try {
+        await entry.view.webContents.executeJavaScript(createCoreChatCompactScript(false))
+      } catch {
+        // A página completa permanece como fallback mesmo quando a limpeza não pode ser executada.
+      }
+      this.emitState({ id: CORECHAT_VIEW_ID, coreChatCompact: result })
+      return result
+    }
   }
 
   private installBudgetMapsObserver(entry: ManagedView) {
     if (entry.descriptor.id !== 'budget-google-maps' || entry.view.webContents.isDestroyed()) return
     if (entry.budgetRouteTimer) clearInterval(entry.budgetRouteTimer)
+    if (entry.coreChatCompactRetryTimer) clearTimeout(entry.coreChatCompactRetryTimer)
     const installToken = (entry.budgetRouteInstallToken ?? 0) + 1
     entry.budgetRouteInstallToken = installToken
     const script = createBudgetMapsDistanceExtractorScript()

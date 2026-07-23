@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { getGreeting } from '../shared/core/home'
 import { HomePage } from '../src/components/HomePage'
 import { useAppearanceStore } from '../src/store/useAppearanceStore'
-import { runHomeQuickAction, type HomeNavigation } from '../src/utils/homeNavigation'
+import { openCoreChatFromHome, runHomeQuickAction, type HomeNavigation } from '../src/utils/homeNavigation'
 
 describe('CoreDesk home copy', () => {
   it('greets by local time', () => {
@@ -27,7 +27,7 @@ describe('CoreDesk home copy', () => {
     expect(markup).not.toContain('Bem-vindo ao CoreDesk.</h1>')
     expect(markup).toContain('Sua central inteligente de operações.')
     expect(markup).toContain('Atendimentos, comunicação, rotas e orçamentos em um único lugar.')
-    expect(markup).toContain('Assistente inteligente do CoreDesk')
+    expect(markup).toContain('Pesquisas rápidas com ChatGPT')
     expect(markup).not.toContain('<iframe')
   })
 
@@ -50,14 +50,21 @@ describe('CoreDesk home copy', () => {
     ])
   })
 
-  it('keeps CoreChat unavailable without fake actions or external integration', () => {
+  it('opens CoreChat through the existing workspace navigation without a fake prompt', () => {
     const markup = renderToStaticMarkup(createElement(HomePage))
-    expect(markup).toContain('placeholder="Pergunte qualquer coisa ao CoreChat..."')
-    expect(markup).toContain('disabled=""')
-    expect(markup).toContain('aria-label="Enviar mensagem — CoreChat em breve"')
-    expect(markup).toContain('O CoreChat ainda não está disponível.')
+    const calls: string[] = []
+    const navigation: HomeNavigation = {
+      executeCommand: vi.fn(),
+      openInternalTab: vi.fn(),
+      openWorkspaceWebTab: (id) => { calls.push(id) },
+    }
+    openCoreChatFromHome(navigation)
+    expect(calls).toEqual(['coredesk-corechat'])
+    expect(markup).toContain('Abrir CoreChat')
+    expect(markup).toContain('Pesquisas rápidas com ChatGPT')
+    expect(markup).not.toContain('Em breve')
+    expect(markup).not.toContain('Pergunte qualquer coisa ao CoreChat')
     expect(markup).not.toContain('<iframe')
-    expect(markup).not.toContain('<form')
   })
 
   it('shows only real appearance preferences in system status', () => {

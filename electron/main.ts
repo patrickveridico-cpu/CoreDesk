@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { BudgetMapsRoutePayload, WebTabDescriptor } from '../shared/contracts'
 import type { CoreConfig } from '../shared/core/contracts'
 import type { CreateWhatsAppProfileInput, UpdateWhatsAppProfileInput } from '../shared/whatsapp'
-import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
+import { BUDGET_MAPS_CHANNELS, CORE_CHANNELS, CORECHAT_CHANNELS, OPERATIONS_CHANNELS, VIEW_CHANNELS, WHATSAPP_CHANNELS, WINDOW_CHANNELS, ZOOM_CHANNELS } from './channels'
 import { WebViewManager } from './WebViewManager'
 import { createAppServices } from './core/bootstrap/AppServices'
 import type { AppServices } from './core/bootstrap/AppServices'
@@ -299,6 +299,20 @@ function isTrustedRenderer(sender: Electron.WebContents) {
 }
 
 function registerViewControls() {
+  ipcMain.handle(CORECHAT_CHANNELS.getCompact, (event) => {
+    if (!isTrustedRenderer(event.sender)) throw new Error('Origem IPC não autorizada.')
+    return viewManager?.getCoreChatCompact() ?? true
+  })
+  ipcMain.handle(CORECHAT_CHANNELS.setCompact, async (event, enabled: unknown) => {
+    if (!isTrustedRenderer(event.sender)) throw new Error('Origem IPC não autorizada.')
+    if (typeof enabled !== 'boolean') throw new Error('Preferência de modo compacto inválida.')
+    return viewManager?.setCoreChatCompact(enabled) ?? {
+      enabled,
+      applied: false,
+      reason: 'view-not-ready',
+      hiddenElements: 0,
+    }
+  })
   ipcMain.on(VIEW_CHANNELS.sync, (event, tabs: WebTabDescriptor[], activeTabId: string) => {
     if (isTrustedRenderer(event.sender) && Array.isArray(tabs) && typeof activeTabId === 'string') {
       viewManager?.sync(tabs, activeTabId)
