@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, X, Copy } from 'lucide-react'
 
-const buttonClass = 'window-interactive grid h-10 w-11 place-items-center text-slate-400 transition-colors hover:bg-white/5 hover:text-white'
+const buttonClass = 'window-interactive grid h-9 w-11 place-items-center text-slate-400 transition-colors hover:bg-white/5 hover:text-white'
 
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false)

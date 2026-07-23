@@ -1,6 +1,6 @@
 export const SHELL_LAYOUT = {
-  titleBarHeight: 40,
-  globalBarHeight: 48,
+  titleBarHeight: 38,
+  globalBarHeight: 42,
   sidebarWidth: 56,
-  navigationBarHeight: 38,
+  navigationBarHeight: 36,
 } as const
