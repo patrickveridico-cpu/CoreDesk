@@ -1,6 +1,9 @@
 export interface CoreConfig {
   schemaVersion: number
   theme: 'dark' | 'light' | 'system'
+  accentColor: 'blue' | 'violet' | 'green' | 'orange' | 'red' | 'gold'
+  motionEnabled: boolean
+  soundEnabled: boolean
   language: 'pt-BR' | 'en-US'
   startBehavior: 'restore' | 'home'
   restoreWorkspace: boolean

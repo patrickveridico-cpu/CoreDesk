@@ -6,11 +6,15 @@ export default {
     extend: {
       colors: {
         core: {
-          canvas: '#0b0e12',
-          panel: '#11161c',
-          raised: '#171d25',
-          line: '#252d37',
-          accent: '#1cc8ee',
+          canvas: 'rgb(var(--core-canvas) / <alpha-value>)',
+          panel: 'rgb(var(--core-surface) / <alpha-value>)',
+          raised: 'rgb(var(--core-surface-elevated) / <alpha-value>)',
+          line: 'rgb(var(--core-border) / <alpha-value>)',
+          accent: 'rgb(var(--core-accent) / <alpha-value>)',
+          'accent-hover': 'rgb(var(--core-accent-hover) / <alpha-value>)',
+          'accent-active': 'rgb(var(--core-accent-active) / <alpha-value>)',
+          text: 'rgb(var(--core-text-primary) / <alpha-value>)',
+          muted: 'rgb(var(--core-text-secondary) / <alpha-value>)',
         },
       },
     },

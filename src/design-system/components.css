@@ -1,0 +1,135 @@
+.ds-focus-ring {
+  outline: none;
+}
+
+.ds-focus-ring:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--core-canvas)), 0 0 0 4px rgb(var(--core-focus-ring) / 0.8);
+}
+
+.ds-button,
+.ds-icon-button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--core-radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--core-font-size-helper);
+  font-weight: 600;
+  justify-content: center;
+  transition:
+    background-color var(--core-motion-normal) var(--core-easing-standard),
+    border-color var(--core-motion-normal) var(--core-easing-standard),
+    color var(--core-motion-normal) var(--core-easing-standard);
+}
+
+.ds-button {
+  gap: var(--core-space-2);
+  min-height: 2.25rem;
+  padding: var(--core-space-2) var(--core-space-3);
+}
+
+.ds-icon-button {
+  height: 2.25rem;
+  padding: 0;
+  width: 2.25rem;
+}
+
+.ds-button[data-variant="primary"] {
+  background: rgb(var(--core-accent));
+  color: white;
+}
+
+.ds-button[data-variant="primary"]:hover:not(:disabled) {
+  background: rgb(var(--core-accent-hover));
+}
+
+.ds-button[data-variant="primary"]:active:not(:disabled) {
+  background: rgb(var(--core-accent-active));
+}
+
+.ds-button[data-variant="secondary"],
+.ds-icon-button {
+  background: rgb(var(--core-surface));
+  border-color: rgb(var(--core-border));
+  color: rgb(var(--core-text-primary));
+}
+
+.ds-button[data-variant="secondary"]:hover:not(:disabled),
+.ds-icon-button:hover:not(:disabled) {
+  background: rgb(var(--core-surface-elevated));
+  border-color: rgb(var(--core-accent) / 0.55);
+}
+
+.ds-button[data-variant="ghost"] {
+  background: transparent;
+  color: rgb(var(--core-text-secondary));
+}
+
+.ds-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: rgb(var(--core-accent-soft) / 0.10);
+  color: rgb(var(--core-text-primary));
+}
+
+.ds-button:disabled,
+.ds-icon-button:disabled {
+  color: rgb(var(--core-text-disabled));
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ds-surface {
+  background: rgb(var(--core-surface));
+  border: 1px solid rgb(var(--core-border));
+  border-radius: var(--core-radius-lg);
+}
+
+.ds-surface[data-elevation="raised"] {
+  background: rgb(var(--core-surface-elevated));
+  box-shadow: var(--core-shadow-medium);
+}
+
+.ds-badge {
+  align-items: center;
+  background: rgb(var(--core-accent-soft) / 0.12);
+  border: 1px solid rgb(var(--core-accent) / 0.28);
+  border-radius: var(--core-radius-full);
+  color: rgb(var(--core-accent));
+  display: inline-flex;
+  font-size: var(--core-font-size-caption);
+  font-weight: 600;
+  min-height: 1.25rem;
+  padding: 0 var(--core-space-2);
+}
+
+.ds-divider {
+  background: rgb(var(--core-divider));
+  border: 0;
+  flex: none;
+  margin: 0;
+}
+
+.ds-divider[data-orientation="horizontal"] {
+  height: 1px;
+  width: 100%;
+}
+
+.ds-divider[data-orientation="vertical"] {
+  align-self: stretch;
+  min-height: 1rem;
+  width: 1px;
+}
+
+.ds-spinner {
+  animation: ds-spin var(--core-motion-slow) linear infinite;
+  border: 2px solid rgb(var(--core-border));
+  border-radius: 50%;
+  border-top-color: rgb(var(--core-accent));
+  display: inline-block;
+  height: 1rem;
+  width: 1rem;
+}
+
+@keyframes ds-spin {
+  to { transform: rotate(360deg); }
+}

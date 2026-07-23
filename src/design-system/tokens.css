@@ -1,0 +1,63 @@
+:root {
+  /* Semantic colors are RGB channels so Tailwind opacity modifiers keep working. */
+  --core-canvas: 15 18 23;
+  --core-background-secondary: 18 22 28;
+  --core-surface: 22 27 34;
+  --core-surface-elevated: 28 34 43;
+  --core-sidebar: 17 21 27;
+  --core-header: 19 24 30;
+  --core-text-primary: 241 245 249;
+  --core-text-secondary: 148 163 184;
+  --core-text-disabled: 100 116 139;
+  --core-border: 44 54 66;
+  --core-divider: 35 44 55;
+  --core-success: 52 211 153;
+  --core-warning: 251 191 36;
+  --core-danger: 248 113 113;
+  --core-info: 56 189 248;
+  --core-accent: 56 189 248;
+  --core-accent-hover: 14 165 233;
+  --core-accent-active: 2 132 199;
+  --core-accent-soft: 56 189 248;
+  --core-focus-ring: 125 211 252;
+
+  --core-shadow-color: 0 0 0;
+  --core-shadow-low: 0 1px 2px rgb(var(--core-shadow-color) / 0.18);
+  --core-shadow-medium: 0 8px 24px rgb(var(--core-shadow-color) / 0.22);
+  --core-shadow-high: 0 18px 48px rgb(var(--core-shadow-color) / 0.30);
+
+  --core-radius-xs: 0.25rem;
+  --core-radius-sm: 0.375rem;
+  --core-radius-md: 0.5rem;
+  --core-radius-lg: 0.75rem;
+  --core-radius-xl: 1rem;
+  --core-radius-full: 9999px;
+
+  --core-space-1: 0.25rem;
+  --core-space-2: 0.5rem;
+  --core-space-3: 0.75rem;
+  --core-space-4: 1rem;
+  --core-space-5: 1.25rem;
+  --core-space-6: 1.5rem;
+  --core-space-8: 2rem;
+
+  --core-motion-fast: 100ms;
+  --core-motion-normal: 160ms;
+  --core-motion-slow: 240ms;
+  --core-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --core-easing-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+
+  --core-elevation-base: 0;
+  --core-elevation-header: 100;
+  --core-elevation-overlay: 500;
+  --core-elevation-modal: 1000;
+
+  --core-font-sans: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --core-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --core-font-size-caption: 0.6875rem;
+  --core-font-size-helper: 0.75rem;
+  --core-font-size-body: 0.875rem;
+  --core-font-size-subtitle: 1rem;
+  --core-font-size-section: 1.125rem;
+  --core-font-size-title: 1.375rem;
+}

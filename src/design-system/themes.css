@@ -1,0 +1,105 @@
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --core-canvas: 15 18 23;
+  --core-background-secondary: 18 22 28;
+  --core-surface: 22 27 34;
+  --core-surface-elevated: 28 34 43;
+  --core-sidebar: 17 21 27;
+  --core-header: 19 24 30;
+  --core-text-primary: 241 245 249;
+  --core-text-secondary: 148 163 184;
+  --core-text-disabled: 100 116 139;
+  --core-border: 44 54 66;
+  --core-divider: 35 44 55;
+  --core-shadow-color: 0 0 0;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --core-canvas: 242 245 248;
+  --core-background-secondary: 235 239 244;
+  --core-surface: 255 255 255;
+  --core-surface-elevated: 255 255 255;
+  --core-sidebar: 247 249 251;
+  --core-header: 252 253 254;
+  --core-text-primary: 24 32 43;
+  --core-text-secondary: 71 85 105;
+  --core-text-disabled: 148 163 184;
+  --core-border: 207 216 227;
+  --core-divider: 225 231 239;
+  --core-shadow-color: 51 65 85;
+}
+
+/*
+ * Compatibility bridge while existing screens are migrated incrementally.
+ * It keeps the current slate-based typography readable without rewriting pages.
+ */
+:root[data-theme="light"] .text-white,
+:root[data-theme="light"] .text-slate-100,
+:root[data-theme="light"] .text-slate-200 {
+  color: rgb(var(--core-text-primary));
+}
+
+:root[data-theme="light"] .text-slate-300,
+:root[data-theme="light"] .text-slate-400,
+:root[data-theme="light"] .text-slate-500 {
+  color: rgb(var(--core-text-secondary));
+}
+
+:root[data-theme="light"] .text-slate-600 {
+  color: rgb(var(--core-text-disabled));
+}
+
+:root[data-accent="blue"] {
+  --core-accent: 14 165 233;
+  --core-accent-hover: 2 132 199;
+  --core-accent-active: 3 105 161;
+  --core-accent-soft: 14 165 233;
+  --core-focus-ring: 56 189 248;
+}
+
+:root[data-accent="violet"] {
+  --core-accent: 139 92 246;
+  --core-accent-hover: 124 58 237;
+  --core-accent-active: 109 40 217;
+  --core-accent-soft: 139 92 246;
+  --core-focus-ring: 167 139 250;
+}
+
+:root[data-accent="green"] {
+  --core-accent: 16 185 129;
+  --core-accent-hover: 5 150 105;
+  --core-accent-active: 4 120 87;
+  --core-accent-soft: 16 185 129;
+  --core-focus-ring: 52 211 153;
+}
+
+:root[data-accent="orange"] {
+  --core-accent: 249 115 22;
+  --core-accent-hover: 234 88 12;
+  --core-accent-active: 194 65 12;
+  --core-accent-soft: 249 115 22;
+  --core-focus-ring: 251 146 60;
+}
+
+:root[data-accent="red"] {
+  --core-accent: 239 68 68;
+  --core-accent-hover: 220 38 38;
+  --core-accent-active: 185 28 28;
+  --core-accent-soft: 239 68 68;
+  --core-focus-ring: 248 113 113;
+}
+
+:root[data-accent="gold"] {
+  --core-accent: 202 138 4;
+  --core-accent-hover: 161 98 7;
+  --core-accent-active: 133 77 14;
+  --core-accent-soft: 202 138 4;
+  --core-focus-ring: 234 179 8;
+}
+
+body {
+  background: rgb(var(--core-canvas));
+  color: rgb(var(--core-text-primary));
+}

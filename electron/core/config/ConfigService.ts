@@ -6,7 +6,8 @@ import { StorageService } from '../storage/StorageService'
 
 export const DEFAULT_CORE_CONFIG: CoreConfig = {
   schemaVersion: 1,
-  theme: 'dark', language: 'pt-BR', startBehavior: 'restore', restoreWorkspace: true,
+  theme: 'dark', accentColor: 'blue', motionEnabled: true, soundEnabled: false,
+  language: 'pt-BR', startBehavior: 'restore', restoreWorkspace: true,
   startMinimized: false, confirmBeforeQuit: false, spellcheck: true, shortcuts: {},
   notificationsEnabled: false, manualSuspensionEnabled: true, lastVersion: '0.1.0',
 }
@@ -41,7 +42,18 @@ export class ConfigService {
   private validate(value: unknown): CoreConfig {
     const source = value && typeof value === 'object' ? value as Partial<CoreConfig> : {}
     const theme = source.theme === 'light' || source.theme === 'system' ? source.theme : 'dark'
+    const accentColor = ['blue', 'violet', 'green', 'orange', 'red', 'gold'].includes(source.accentColor ?? '') ? source.accentColor as CoreConfig['accentColor'] : 'blue'
     const language = source.language === 'en-US' ? 'en-US' : 'pt-BR'
-    return { ...DEFAULT_CORE_CONFIG, ...source, theme, language, schemaVersion: 1, shortcuts: { ...(source.shortcuts ?? {}) } }
+    return {
+      ...DEFAULT_CORE_CONFIG,
+      ...source,
+      theme,
+      accentColor,
+      motionEnabled: source.motionEnabled !== false,
+      soundEnabled: source.soundEnabled === true,
+      language,
+      schemaVersion: 1,
+      shortcuts: { ...(source.shortcuts ?? {}) },
+    }
   }
 }
