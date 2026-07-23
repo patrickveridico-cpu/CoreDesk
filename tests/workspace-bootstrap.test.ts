@@ -6,6 +6,7 @@ import {
   normalizeTabsStateForBootstrap,
   useTabsStore,
 } from '../src/store/useTabsStore'
+import { MIRO_TAB_ID } from '../shared/miro'
 import { reconcileWhatsAppTabs } from '../src/store/useWhatsAppStore'
 
 let persistError: ReturnType<typeof vi.spyOn>
@@ -100,6 +101,6 @@ describe('workspace bootstrap', () => {
       activeTabId: useTabsStore.getState().activeTabId,
     }) as { tabs: WorkspaceTab[]; activeTabId: string }
     expect(restarted.activeTabId).toBe('home')
-    expect(restarted.tabs.map((tab) => tab.id)).toEqual(['home', whatsappTab.id, mapsTab.id])
+    expect(restarted.tabs.map((tab) => tab.id)).toEqual(['home', MIRO_TAB_ID, whatsappTab.id, mapsTab.id])
   })
 })

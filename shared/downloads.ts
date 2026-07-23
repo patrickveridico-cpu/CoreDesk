@@ -59,5 +59,8 @@ export function isPotentiallyDangerousDownload(fileName: string) {
 }
 
 export function canStartManagedDownload(source: DownloadSource, url: string, hasUserGesture: boolean) {
-  return hasUserGesture && source.type === 'whatsapp' && source.isVisible() && classifyDownloadUrl(url).allowed
+  if (!hasUserGesture || !source.isVisible() || !classifyDownloadUrl(url).allowed) return false
+  if (source.type === 'whatsapp') return true
+  return source.viewId === MIRO_VIEW_ID && isMiroDownloadUrlAllowed(url)
 }
+import { MIRO_VIEW_ID, isMiroDownloadUrlAllowed } from './miro'

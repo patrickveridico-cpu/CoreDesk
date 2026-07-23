@@ -4,6 +4,7 @@ import { CommunicationPage } from './communication/CommunicationPage'
 import { SettingsPage } from './SettingsPage'
 import { OperationsPage } from '../modules/operations/pages/OperationsPage'
 import { HomePage } from './HomePage'
+import { MIRO_TAB_ID } from '../../shared/miro'
 
 export function WorkspaceContent() {
   const tabs = useTabsStore((state) => state.tabs)
@@ -15,6 +16,6 @@ export function WorkspaceContent() {
     <div className={`h-full min-h-0 ${visible('communication')}`}><CommunicationPage /></div>
     <div className={`h-full min-h-0 ${visible('routes')} flex`}><OperationsPage /></div>
     <div className={`h-full min-h-0 ${tab?.id === 'settings' || tab?.id === 'about' ? 'workspace-page workspace-page-active' : 'hidden'}`}><SettingsPage /></div>
-    <div className={`h-full min-h-0 ${web || !tab || tab.type === 'internal' && !['communication', 'routes', 'settings', 'about'].includes(tab.id) ? !web ? 'workspace-page workspace-page-active' : '' : 'hidden'}`}>{(!tab || tab.type === 'internal') && <HomePage />}{web && tab?.loading && <div className="grid h-full place-items-center text-sm text-slate-400">Carregando {tab.id === 'app-maps' ? 'Google Maps' : 'Google'}...</div>}{web && tab?.error && <WebErrorOverlay tab={tab} />}</div>
+    <div className={`h-full min-h-0 ${web || !tab || tab.type === 'internal' && !['communication', 'routes', 'settings', 'about'].includes(tab.id) ? !web ? 'workspace-page workspace-page-active' : '' : 'hidden'}`}>{(!tab || tab.type === 'internal') && <HomePage />}{web && tab?.loading && <div className="grid h-full place-items-center bg-core-canvas text-sm text-slate-400"><span className="flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-core-line border-t-core-accent" />{tab.id === MIRO_TAB_ID ? 'Abrindo Miro…' : `Carregando ${tab.id === 'app-maps' ? 'Google Maps' : 'Google'}...`}</span></div>}{web && tab?.error && <WebErrorOverlay tab={tab} />}</div>
   </main>
 }

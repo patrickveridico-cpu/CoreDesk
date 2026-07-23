@@ -1,5 +1,6 @@
 import { ArrowLeft, RefreshCw, TriangleAlert } from 'lucide-react'
 import type { WorkspaceTab } from '../../shared/contracts'
+import { MIRO_DASHBOARD_URL, MIRO_TAB_ID } from '../../shared/miro'
 
 export function WebErrorOverlay({ tab }: { tab: WorkspaceTab }) {
   if (!tab.error) return null
@@ -22,6 +23,11 @@ export function WebErrorOverlay({ tab }: { tab: WorkspaceTab }) {
           <button className="flex items-center gap-2 rounded-md border border-core-line bg-core-panel px-3 py-2 text-xs text-slate-300 hover:bg-core-raised" onClick={() => views?.back(tab.id)} disabled={!tab.canGoBack}>
             <ArrowLeft size={14} /> Voltar
           </button>
+          {tab.id === MIRO_TAB_ID && (
+            <button className="rounded-md border border-core-line bg-core-panel px-3 py-2 text-xs text-slate-300 hover:bg-core-raised" onClick={() => views?.navigate(tab.id, MIRO_DASHBOARD_URL)}>
+              Dashboard
+            </button>
+          )}
         </div>
       </section>
     </div>

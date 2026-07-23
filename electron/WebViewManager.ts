@@ -20,6 +20,11 @@ import {
   createCoreChatFocusScript,
   type CoreChatCompactResult,
 } from '../shared/corechat'
+import {
+  MIRO_PARTITION,
+  MIRO_VIEW_ID,
+  classifyMiroNavigation,
+} from '../shared/miro'
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
@@ -73,6 +78,29 @@ function coreChatPopupOptions(parent: BrowserWindow): BrowserWindowConstructorOp
   }
 }
 
+function miroAuthPopupOptions(parent: BrowserWindow): BrowserWindowConstructorOptions {
+  return {
+    parent,
+    modal: false,
+    show: true,
+    frame: true,
+    resizable: true,
+    width: 720,
+    height: 760,
+    minWidth: 520,
+    minHeight: 520,
+    backgroundColor: '#0b0e12',
+    webPreferences: {
+      partition: MIRO_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+    },
+  }
+}
+
 export class WebViewManager {
   private readonly views = new Map<string, ManagedView>()
   private readonly configuredPartitions = new Set<string>()
@@ -106,7 +134,7 @@ export class WebViewManager {
 
     for (const id of this.views.keys()) {
       const existing = this.views.get(id)
-      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps' && id !== 'budget-google-maps' && id !== CORECHAT_VIEW_ID) {
+      if (!incomingIds.has(id) && existing?.descriptor.type !== 'whatsapp' && id !== 'app-google' && id !== 'app-maps' && id !== 'budget-google-maps' && id !== CORECHAT_VIEW_ID && id !== MIRO_VIEW_ID) {
         this.destroy(id)
       }
     }
@@ -195,6 +223,10 @@ export class WebViewManager {
     if (!entry || !this.isAllowedUrl(url)) return
     if (id === CORECHAT_VIEW_ID) {
       const decision = classifyCoreChatNavigation(url)
+      if (decision.action !== 'allow-internal' && decision.action !== 'allow-auth') return
+    }
+    if (id === MIRO_VIEW_ID) {
+      const decision = classifyMiroNavigation(url)
       if (decision.action !== 'allow-internal' && decision.action !== 'allow-auth') return
     }
     entry.failed = false
@@ -332,7 +364,7 @@ export class WebViewManager {
       view,
       cleanup: [],
       failed: false,
-      loading: false,
+      loading: descriptor.id === MIRO_VIEW_ID,
       suspended: Boolean(descriptor.suspended),
     }
     view.webContents.setZoomFactor(this.zoomFactor)
@@ -353,6 +385,7 @@ export class WebViewManager {
       isVisible: () => this.activeId === descriptor.id && this.attachedId === descriptor.id,
     })
     this.registerViewEvents(entry)
+    if (descriptor.id === MIRO_VIEW_ID) this.emitState({ id: descriptor.id, loading: true, error: null })
     void view.webContents.loadURL(descriptor.url)
   }
 
@@ -408,6 +441,7 @@ export class WebViewManager {
           void this.focusCoreChatPrompt(entry, entry.coreChatFocusToken ?? 0)
         }
       }
+      if (id === MIRO_VIEW_ID && id === this.activeId) this.showActive()
     }
     const onNavigate = (_event: Event, url: string) => {
       entry.descriptor = { ...entry.descriptor, url }
@@ -494,6 +528,23 @@ export class WebViewManager {
         })
         return
       }
+      if (id === MIRO_VIEW_ID) {
+        if (!isMainFrame) return
+        const miroDecision = classifyMiroNavigation(url)
+        if (miroDecision.action === 'allow-internal' || miroDecision.action === 'allow-auth') return
+        event.preventDefault()
+        if (miroDecision.action === 'open-external' && eventName === 'will-navigate') {
+          this.onWhatsAppExternalLink?.(url, { target: MIRO_VIEW_ID })
+        }
+        this.devLog('miro-navigation-blocked', {
+          target: id,
+          event: eventName,
+          protocol: miroDecision.protocol,
+          hostname: miroDecision.hostname,
+          reason: miroDecision.action === 'block' ? miroDecision.reason : 'external-main-frame-navigation',
+        })
+        return
+      }
       if (!this.isAllowedUrl(url)) event.preventDefault()
     }
     const onWillNavigate = (event: Event, url: string, _isInPlace?: boolean, isMainFrame?: boolean) => handleManagedNavigation('will-navigate', event, url, isMainFrame)
@@ -512,6 +563,24 @@ export class WebViewManager {
       this.send(VIEW_CHANNELS.shortcut, command)
     }
     const onDidCreateWindow = (child: BrowserWindow) => {
+      if (id === MIRO_VIEW_ID) {
+        const guardMiroPopupNavigation = (event: Event, url: string) => {
+          const decision = classifyMiroNavigation(url)
+          if (decision.action === 'allow-internal' || decision.action === 'allow-auth') return
+          event.preventDefault()
+        }
+        child.webContents.on('will-navigate', guardMiroPopupNavigation)
+        child.webContents.on('will-redirect', guardMiroPopupNavigation)
+        child.webContents.setWindowOpenHandler(({ url }) => {
+          const decision = classifyMiroNavigation(url)
+          if (decision.action === 'allow-internal' || decision.action === 'allow-auth') {
+            return { action: 'allow', overrideBrowserWindowOptions: miroAuthPopupOptions(this.window) }
+          }
+          if (decision.action === 'open-external') this.onWhatsAppExternalLink?.(url, { target: MIRO_VIEW_ID })
+          return { action: 'deny' }
+        })
+        return
+      }
       if (id !== CORECHAT_VIEW_ID) return
       const guardPopupNavigation = (event: Event, url: string) => {
         const decision = classifyCoreChatNavigation(url)
@@ -578,12 +647,36 @@ export class WebViewManager {
         }
         if (decision.action === 'open-external') {
           this.onWhatsAppExternalLink?.(url, { target: CORECHAT_VIEW_ID })
-        } else {
+        } else if (decision.action === 'block') {
           this.devLog('corechat-popup-blocked', {
             target: id,
             protocol: decision.protocol,
             hostname: decision.hostname,
             reason: decision.action === 'block' ? decision.reason : 'popup-not-allowed',
+          })
+        }
+        return { action: 'deny' }
+      }
+      if (id === MIRO_VIEW_ID) {
+        const decision = classifyMiroNavigation(url)
+        if (decision.action === 'allow-internal') {
+          void webContents.loadURL(url)
+          return { action: 'deny' }
+        }
+        if (decision.action === 'allow-auth') {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: miroAuthPopupOptions(this.window),
+          }
+        }
+        if (decision.action === 'open-external') {
+          this.onWhatsAppExternalLink?.(url, { target: MIRO_VIEW_ID })
+        } else if (decision.action === 'block') {
+          this.devLog('miro-popup-blocked', {
+            target: id,
+            protocol: decision.protocol,
+            hostname: decision.hostname,
+            reason: decision.reason,
           })
         }
         return { action: 'deny' }
@@ -788,7 +881,9 @@ export class WebViewManager {
 
   private showActive() {
     const next = this.activeId ? this.views.get(this.activeId) : undefined
-    const shouldAttach = next && !next.failed && !next.suspended ? next.descriptor.id : null
+    const shouldAttach = next && !next.failed && !next.suspended && !(next.descriptor.id === MIRO_VIEW_ID && next.loading)
+      ? next.descriptor.id
+      : null
 
     if (this.attachedId && this.attachedId !== shouldAttach) {
       const previousId = this.attachedId

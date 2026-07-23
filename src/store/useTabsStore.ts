@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { NewTabRequest, WebViewStateUpdate, WorkspaceTab } from '../../shared/contracts'
 import { CORECHAT_VIEW_ID } from '../../shared/corechat'
+import { MIRO_DASHBOARD_URL, MIRO_PARTITION, MIRO_TAB_ID } from '../../shared/miro'
 import type { WhatsAppProfile, WhatsAppProfileState } from '../../shared/whatsapp'
 import { WHATSAPP_URL } from '../../shared/whatsapp'
 
@@ -19,6 +20,10 @@ export const initialTabs: WorkspaceTab[] = [
   {
     id: 'communication', type: 'internal', title: 'Comunicação', closable: false, pinned: true,
     ...cleanWebState,
+  },
+  {
+    id: MIRO_TAB_ID, type: 'web', title: 'Miro', url: MIRO_DASHBOARD_URL,
+    partition: MIRO_PARTITION, closable: false, pinned: true, ...cleanWebState,
   },
   {
     id: 'app-example', type: 'web', title: 'Página de teste', url: 'https://example.com',
@@ -77,7 +82,24 @@ export function normalizeTabsStateForBootstrap(persistedState: unknown) {
     pinned: true,
     ...cleanWebState,
   }
-  const tabs = [homeTab, ...workspaceTabs.filter((tab) => tab.id !== 'home')]
+  const persistedMiro = workspaceTabs.find((tab) => tab.id === MIRO_TAB_ID)
+  const miroTab: WorkspaceTab = {
+    ...initialTabs.find((tab) => tab.id === MIRO_TAB_ID)!,
+    ...persistedMiro,
+    id: MIRO_TAB_ID,
+    type: 'web',
+    title: 'Miro',
+    url: MIRO_DASHBOARD_URL,
+    partition: MIRO_PARTITION,
+    closable: false,
+    pinned: true,
+    ...cleanWebState,
+  }
+  const tabs = [
+    homeTab,
+    miroTab,
+    ...workspaceTabs.filter((tab) => tab.id !== 'home' && tab.id !== MIRO_TAB_ID),
+  ]
   return { ...persistedState, tabs, activeTabId: 'home' }
 }
 

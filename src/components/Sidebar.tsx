@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Home, Map, MessageSquare, Minus, Pin, Plus, Route, Search, Settings, X } from 'lucide-react'
+import { Home, Map, MessageSquare, Minus, PanelsTopLeft, Pin, Plus, Route, Search, Settings, X } from 'lucide-react'
 import { SHELL_LAYOUT } from '../../shared/layout'
+import { MIRO_TAB_ID } from '../../shared/miro'
 import { formatUnreadCount } from '../../shared/whatsapp'
 import { useTabsStore } from '../store/useTabsStore'
 import { useWhatsAppStore } from '../store/useWhatsAppStore'
@@ -12,22 +13,23 @@ const moduleButton = 'module-button toolbar-icon-button relative grid h-10 w-10 
 function WebGuideTabs() {
   const allTabs = useTabsStore((state) => state.tabs)
   const tabs = useMemo(
-    () => allTabs.filter((tab) => tab.id === 'app-google' || tab.id === 'app-maps'),
+    () => allTabs.filter((tab) => tab.id === 'app-google' || tab.id === 'app-maps' || tab.id === MIRO_TAB_ID),
     [allTabs],
   )
   const activeTabId = useTabsStore((state) => state.activeTabId)
   const openWorkspaceWebTab = useTabsStore((state) => state.openWorkspaceWebTab)
+  const selectTab = useTabsStore((state) => state.selectTab)
   const toggleWebTabPinned = useTabsStore((state) => state.toggleWebTabPinned)
   const closeTab = useTabsStore((state) => state.closeTab)
   const navigate = (id: string, query: string) => { const url = buildGoogleSearchUrl(query); if (url) window.coreDesk?.views.navigate(id, url) }
   const [query, setQuery] = useState('')
   if (!tabs.length) return <div className="min-w-0 flex-1" />
   return <div className="flex min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto px-2" role="tablist" aria-label="Guias web">
-    {tabs.map((tab) => { const active = activeTabId === tab.id; const google = tab.id === 'app-google'; return <div key={tab.id} role="tab" aria-selected={active} aria-controls="workspace-content" data-active={active} title={tab.title} className={`web-guide-tab group relative flex h-8 max-w-56 min-w-0 items-center gap-1 rounded-md border px-2 text-xs ${active ? 'border-core-accent/60 bg-core-accent/10 text-white' : 'border-transparent text-slate-400 hover:bg-white/5'}`}>
-      <button onClick={() => openWorkspaceWebTab(tab.id as 'app-google' | 'app-maps')} className="flex min-w-0 items-center gap-1.5" aria-label={`Abrir ${tab.title}`}><span>{google ? '⌕' : '⌖'}</span><span className="truncate">{google ? 'Google' : 'Maps'}</span></button>
+    {tabs.map((tab) => { const active = activeTabId === tab.id; const google = tab.id === 'app-google'; const miro = tab.id === MIRO_TAB_ID; return <div key={tab.id} role="tab" aria-selected={active} aria-controls="workspace-content" data-active={active} title={tab.title} className={`web-guide-tab group relative flex h-8 max-w-56 min-w-0 items-center gap-1 rounded-md border px-2 text-xs ${active ? 'border-core-accent/60 bg-core-accent/10 text-white' : 'border-transparent text-slate-400 hover:bg-white/5'}`}>
+      <button onClick={() => miro ? selectTab(MIRO_TAB_ID) : openWorkspaceWebTab(tab.id as 'app-google' | 'app-maps')} className="flex min-w-0 items-center gap-1.5" aria-label={`Abrir ${tab.title}`}>{miro ? <PanelsTopLeft size={13} /> : <span>{google ? '⌕' : '⌖'}</span>}<span className="truncate">{miro ? 'Miro' : google ? 'Google' : 'Maps'}</span></button>
       {active && google && <form onSubmit={(event) => { event.preventDefault(); navigate(tab.id, query) }}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar" aria-label="Pesquisar no Google" className="w-24 min-w-0 bg-transparent text-[11px] text-white outline-none placeholder:text-slate-600" /></form>}
-      <button onClick={() => toggleWebTabPinned(tab.id as 'app-google' | 'app-maps')} aria-label={tab.pinned ? 'Desafixar guia' : 'Fixar guia'} title={tab.pinned ? 'Desafixar' : 'Fixar'} data-pinned={tab.pinned} className={`tab-action grid h-6 w-6 place-items-center rounded hover:bg-white/10 ${tab.pinned ? 'text-core-accent' : 'text-slate-600'}`}><Pin size={12} /></button>
-      <button onClick={() => closeTab(tab.id)} aria-label={`Fechar ${tab.title}`} title="Fechar" className="tab-action tab-close-action grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-white/10 hover:text-white"><X size={13} /></button>
+      {!miro && <button onClick={() => toggleWebTabPinned(tab.id as 'app-google' | 'app-maps')} aria-label={tab.pinned ? 'Desafixar guia' : 'Fixar guia'} title={tab.pinned ? 'Desafixar' : 'Fixar'} data-pinned={tab.pinned} className={`tab-action grid h-6 w-6 place-items-center rounded hover:bg-white/10 ${tab.pinned ? 'text-core-accent' : 'text-slate-600'}`}><Pin size={12} /></button>}
+      {tab.closable && <button onClick={() => closeTab(tab.id)} aria-label={`Fechar ${tab.title}`} title="Fechar" className="tab-action tab-close-action grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-white/10 hover:text-white"><X size={13} /></button>}
     </div> })}
   </div>
 }
@@ -78,6 +80,7 @@ export function GlobalTopBar() {
     <button onClick={() => openInternalTab('routes', 'Operações')} data-active={activeTabId === 'routes'} className={`${moduleButton} ${activeTabId === 'routes' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Operações" aria-label="Operações"><Route size={18} /></button>
     <button onClick={openMaps} data-active={activeTabId === 'app-maps'} className={`${moduleButton} ${activeTabId === 'app-maps' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Abrir Maps" aria-label="Abrir Maps"><Map size={18} /></button>
     <button onClick={openGoogle} data-active={activeTabId === 'app-google'} className={`${moduleButton} ${activeTabId === 'app-google' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Abrir Google" aria-label="Abrir Google"><Search size={18} /></button>
+    <button onClick={() => selectTab(MIRO_TAB_ID)} data-active={activeTabId === MIRO_TAB_ID} className={`${moduleButton} ${activeTabId === MIRO_TAB_ID ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Abrir Miro" aria-label="Abrir Miro"><PanelsTopLeft size={18} /></button>
     <ZoomControls />
     <button onClick={() => openInternalTab('settings', 'Configurações')} data-active={activeTabId === 'settings'} className={`${moduleButton} ${activeTabId === 'settings' ? 'bg-core-accent/10 text-core-accent' : ''}`} title="Configurações" aria-label="Configurações"><Settings size={18} /></button>
     {menuProfileId && (() => { const profile = profiles.find((item) => item.id === menuProfileId); if (!profile) return null; return <div onClick={(event) => event.stopPropagation()} className="profile-menu absolute right-2 top-11 z-50 w-48 rounded-md border border-core-line bg-core-raised p-1 text-xs"><button onClick={() => void openProfile(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Abrir</button><button onClick={() => { const name = window.prompt('Novo nome', profile.name); if (name) void updateProfile(profile.id, { name }) }} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Renomear</button><button onClick={() => void selectIcon(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Alterar ícone</button><button onClick={() => { const accentColor = window.prompt('Cor hexadecimal', profile.accentColor); if (accentColor) void updateProfile(profile.id, { accentColor }) }} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Alterar cor</button><button onClick={() => void reloadProfile(profile.id)} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">Recarregar</button><button onClick={() => void (profile.suspended ? resumeProfile(profile.id) : suspendProfile(profile.id))} className="w-full rounded px-2 py-2 text-left text-slate-300 hover:bg-white/5">{profile.suspended ? 'Retomar' : 'Suspender'}</button><button onClick={() => { if (window.confirm('Esta ação desconectará o WhatsApp deste perfil.')) void clearSession(profile.id) }} className="w-full rounded px-2 py-2 text-left text-amber-300 hover:bg-amber-500/10">Sair da conta</button><button onClick={() => void remove(profile.id)} className="w-full rounded px-2 py-2 text-left text-red-400 hover:bg-red-500/10">Remover perfil</button></div> })()}

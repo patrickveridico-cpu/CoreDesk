@@ -120,7 +120,12 @@ describe('DownloadService', () => {
     const item = new FakeDownloadItem()
     service.handle(event as never, item as never, whatsappSource())
 
-    expect(chooseSavePath).toHaveBeenCalledWith({}, 'documento.pdf')
+    expect(chooseSavePath).toHaveBeenCalledWith({}, 'documento.pdf', expect.objectContaining({
+      viewId: 'whatsapp:profile-1',
+      partition: 'persist:whatsapp-profile-1',
+      type: 'whatsapp',
+      profileId: 'profile-1',
+    }))
     expect(item.savePath).toBe('C:\\chosen\\documento.pdf')
     expect(event.preventDefault).not.toHaveBeenCalled()
     item.receivedBytes = 50

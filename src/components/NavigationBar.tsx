@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, LoaderCircle, Plus, RotateCw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, LayoutDashboard, LoaderCircle, Plus, RotateCw, X } from 'lucide-react'
 import { SHELL_LAYOUT } from '../../shared/layout'
+import { MIRO_DASHBOARD_URL, MIRO_TAB_ID } from '../../shared/miro'
 import { FOCUS_ADDRESS_EVENT } from '../hooks/useTabShortcuts'
 import { useTabsStore } from '../store/useTabsStore'
 import { toNavigableUrl } from '../utils/navigation'
@@ -45,6 +46,16 @@ export function NavigationBar() {
       <button className={controlClass} onClick={() => tab.loading ? views?.stop(tab.id) : views?.reload(tab.id)} aria-label={tab.loading ? 'Parar' : 'Atualizar'}>
         {tab.loading ? <X size={15} /> : <RotateCw size={14} />}
       </button>
+      {tab.id === MIRO_TAB_ID && (
+        <button
+          className={controlClass}
+          onClick={() => views?.navigate(tab.id, MIRO_DASHBOARD_URL)}
+          aria-label="Ir para o dashboard do Miro"
+          title="Dashboard do Miro"
+        >
+          <LayoutDashboard size={14} />
+        </button>
+      )}
       <form className="mx-1 min-w-0 flex-1" onSubmit={submit}>
         <div className="flex h-7 items-center rounded-md border border-core-line bg-core-canvas px-2 focus-within:border-core-accent/60">
           {tab.loading && <LoaderCircle className="mr-2 animate-spin text-core-accent" size={13} />}

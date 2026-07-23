@@ -11,15 +11,15 @@ import {
 } from '../../shared/downloads'
 
 interface DownloadServiceDependencies {
-  chooseSavePath: (window: BrowserWindow, fileName: string) => string | undefined
+  chooseSavePath: (window: BrowserWindow, fileName: string, source: DownloadSource) => string | undefined
   confirmDangerousFile: (window: BrowserWindow, fileName: string) => boolean
   emitStatus: (status: DownloadStatus) => void
   createId: () => string
 }
 
 const defaultDependencies: DownloadServiceDependencies = {
-  chooseSavePath: (window, fileName) => dialog.showSaveDialogSync(window, {
-    title: 'Salvar arquivo do WhatsApp',
+  chooseSavePath: (window, fileName, source) => dialog.showSaveDialogSync(window, {
+    title: source.viewId === 'app-miro' ? 'Salvar exportação do Miro' : 'Salvar arquivo do WhatsApp',
     defaultPath: path.join(app.getPath('downloads'), fileName),
     buttonLabel: 'Salvar',
     properties: ['showOverwriteConfirmation', 'createDirectory'],
@@ -77,7 +77,7 @@ export class DownloadService {
           ? 'download-already-active'
           : !hasUserGesture
             ? 'user-gesture-required'
-          : source.type !== 'whatsapp'
+          : source.type !== 'whatsapp' && source.viewId !== 'app-miro'
           ? 'source-not-allowed'
           : !source.isVisible()
             ? 'source-not-visible'
@@ -96,7 +96,7 @@ export class DownloadService {
       return
     }
 
-    const savePath = this.dependencies.chooseSavePath(this.window, fileName)
+    const savePath = this.dependencies.chooseSavePath(this.window, fileName, source)
     if (!savePath) {
       event.preventDefault()
       this.emit({ id, source, fileName, state: 'cancelled', item, message: 'Download cancelado.' })
