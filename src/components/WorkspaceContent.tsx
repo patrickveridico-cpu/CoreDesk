@@ -1,18 +1,9 @@
-import { useEffect, useState } from 'react'
 import { useTabsStore } from '../store/useTabsStore'
 import { WebErrorOverlay } from './WebErrorOverlay'
 import { CommunicationPage } from './communication/CommunicationPage'
 import { SettingsPage } from './SettingsPage'
-import brandSymbol from '../../assets/brand/derived/coredesk-symbol-256.png'
-import { HOME_PHRASES, getGreeting } from '../../shared/core/home'
 import { OperationsPage } from '../modules/operations/pages/OperationsPage'
-
-function HomePage() {
-  const [phraseIndex, setPhraseIndex] = useState(0)
-  const [rotating, setRotating] = useState(false)
-  useEffect(() => { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; let interval: number | undefined; const start = window.setTimeout(() => { setRotating(true); interval = window.setInterval(() => setPhraseIndex((index) => (index + 1) % HOME_PHRASES.length), 4000) }, 2000); return () => { window.clearTimeout(start); if (interval) window.clearInterval(interval) } }, [])
-  return <div className="flex h-full items-center justify-center p-8"><section className="w-full max-w-3xl"><img src={brandSymbol} alt="CoreDesk" className="mb-5 h-20 w-20 object-contain" /><p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-core-accent">{getGreeting()}</p><h1 className="text-4xl font-semibold tracking-tight text-white">Bem-vindo ao CoreDesk.</h1><p className={`mt-4 max-w-2xl text-base leading-7 text-slate-400 ${rotating ? 'home-phrase' : ''}`}>{HOME_PHRASES[phraseIndex]}</p></section></div>
-}
+import { HomePage } from './HomePage'
 
 export function WorkspaceContent() {
   const tabs = useTabsStore((state) => state.tabs)
