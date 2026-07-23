@@ -49,14 +49,35 @@ main [class*="rounded-lg"][class*="border-core-line"] { animation: content-enter
   background: rgb(var(--core-canvas));
 }
 
+.home-logo-frame {
+  isolation: isolate;
+  max-width: 17.25rem;
+  position: relative;
+  width: clamp(11.5rem, 23vw, 17.25rem);
+}
+
+.home-logo-frame::after {
+  background: linear-gradient(to bottom, transparent, rgb(var(--core-canvas) / 0.94));
+  bottom: 0;
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 78%;
+  z-index: 1;
+}
+
 .home-logo {
-  filter: drop-shadow(0 0.5rem 1.25rem rgb(var(--core-accent) / 0.16));
-  max-width: 16.25rem;
-  width: clamp(11.25rem, 22vw, 16.25rem);
+  filter: drop-shadow(0 0.5rem 1.25rem rgb(var(--core-accent) / 0.14));
 }
 
 .home-logo-enter {
   animation: home-logo-enter var(--core-motion-slow) var(--core-easing-emphasized) both;
+}
+
+.home-logo-breathe {
+  animation: home-logo-breathe 6s var(--core-easing-standard) 500ms infinite alternate;
 }
 
 .home-copy-enter {
@@ -64,8 +85,17 @@ main [class*="rounded-lg"][class*="border-core-line"] { animation: content-enter
 }
 
 .home-shortcut {
-  min-height: 4rem;
-  padding: var(--core-space-2) var(--core-space-3);
+  min-height: 3.5rem;
+  padding: var(--core-space-1) var(--core-space-3);
+}
+
+.home-shortcut:hover:not(:disabled) {
+  background: rgb(var(--core-surface-elevated));
+  border-color: rgb(var(--core-accent) / 0.38);
+}
+
+.home-shortcut:active:not(:disabled) {
+  box-shadow: inset 0 0 0 1px rgb(var(--core-accent) / 0.28);
 }
 
 .home-shortcut-icon {
@@ -86,9 +116,36 @@ main [class*="rounded-lg"][class*="border-core-line"] { animation: content-enter
   box-shadow: var(--core-shadow-low);
 }
 
+.home-corechat-input {
+  background: rgb(var(--core-canvas) / 0.72);
+  border: 1px solid rgb(var(--core-border));
+  border-radius: var(--core-radius-md);
+  color: rgb(var(--core-text-disabled));
+  cursor: not-allowed;
+  font: inherit;
+  font-size: var(--core-font-size-helper);
+  height: 2.25rem;
+  outline: none;
+  padding: 0 var(--core-space-3);
+}
+
+.home-corechat-input::placeholder {
+  color: rgb(var(--core-text-disabled));
+  opacity: 1;
+}
+
+.home-status dd {
+  text-align: right;
+}
+
 @keyframes home-logo-enter {
   from { opacity: 0; transform: scale(0.975); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes home-logo-breathe {
+  from { filter: drop-shadow(0 0.35rem 0.9rem rgb(var(--core-accent) / 0.04)); }
+  to { filter: drop-shadow(0 0.45rem 1.1rem rgb(var(--core-accent) / 0.09)); }
 }
 
 @keyframes home-copy-enter {
@@ -99,6 +156,14 @@ main [class*="rounded-lg"][class*="border-core-line"] { animation: content-enter
 @keyframes home-shortcut-enter {
   from { opacity: 0; transform: translateY(0.2rem); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+:root[data-motion="reduced"] .home-logo-breathe {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-logo-breathe { animation: none; }
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
